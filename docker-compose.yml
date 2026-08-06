@@ -1,0 +1,12 @@
+# Docker 尚未啟用（Phase 1）。
+#
+# 本階段刻意不定義任何 service：專案目前只是一個單純的 FastAPI 應用，
+# 直接使用 `uvicorn app.main:app --reload` 在本機執行即可，不需要容器化。
+#
+# 未來（規劃中，尚未實作）可能會加入的 service：
+#   - api：本專案的 FastAPI 應用
+#   - vector-db：向量資料庫（若改用 server 模式而非本地持久化目錄）
+#   - llm：本地 LLM 推論服務
+#
+# 在 Docker 正式啟用之前，這個檔案僅作為佔位與說明用途，
+# 執行 `docker compose up` 不會啟動任何東西。
