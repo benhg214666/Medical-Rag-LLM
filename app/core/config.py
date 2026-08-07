@@ -2,9 +2,14 @@
 
 使用 pydantic-settings 從「系統環境變數 -> .env -> 程式預設值」的優先順序讀取設定，
 並提供一個可重複使用的 settings 實例供全專案 import。
+
+設計原則：本模組在 import 階段只做「讀取設定」，不建立目錄、不開檔、不連線。
+需要目錄時由呼叫端明確呼叫 ensure_data_directories()，避免 import 產生意外副作用
+（例如跑測試時在專案目錄留下垃圾）。
 """
 
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -12,7 +17,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     """全域設定。
 
-    欄位使用 Python 慣例的小寫命名，但透過 alias 對應到大寫環境變數，
+    欄位使用 Python 慣例的小寫命名，但透過 case_sensitive=False 對應到大寫環境變數，
     例如環境變數 APP_NAME 會寫入欄位 app_name。
     """
 
@@ -23,16 +28,50 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
+    # --- Phase 1：應用程式基本資訊 ---
     app_name: str = "Medical Local RAG"
     app_version: str = "0.1.0"
     app_env: str = "development"
     log_level: str = "INFO"
 
+    # --- Phase 2：資料目錄 ---
+    # 使用相對路徑，讓專案可以搬到任何機器（含 Linux Lab 主機）而不需修改設定。
+    raw_data_dir: Path = Path("data/raw")
+    processed_data_dir: Path = Path("data/processed")
+
+    # --- Phase 2：上傳限制 ---
+    max_upload_size_mb: int = 20
+
+    # --- Phase 2：切塊參數（單位為「字元數」，不是 token）---
+    chunk_size: int = 500
+    chunk_overlap: int = 100
+    min_chunk_size: int = 50
+
+    @property
+    def max_upload_size_bytes(self) -> int:
+        """上傳大小上限，換算成 bytes 以便與檔案長度直接比較。"""
+        return self.max_upload_size_mb * 1024 * 1024
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
-    """回傳快取後的 Settings 實例，避免重複解析 .env。"""
+    """回傳快取後的 Settings 實例，避免重複解析 .env。
+
+    注意：因為有快取，修改 .env 後必須重新啟動程式才會生效。
+    測試若需覆蓋設定，請使用 FastAPI 的 dependency_overrides 注入，
+    不要依賴這個函式的回傳值。
+    """
     return Settings()
+
+
+def ensure_data_directories(settings: Settings) -> None:
+    """建立資料目錄（若不存在）。
+
+    刻意設計成需要明確呼叫，而不是在 import 時自動執行。
+    parents=True 讓多層目錄一次建立完成，exist_ok=True 讓重複呼叫是安全的。
+    """
+    settings.raw_data_dir.mkdir(parents=True, exist_ok=True)
+    settings.processed_data_dir.mkdir(parents=True, exist_ok=True)
 
 
 settings: Settings = get_settings()

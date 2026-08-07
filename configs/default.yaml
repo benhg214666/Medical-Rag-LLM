@@ -1,16 +1,37 @@
-# 預設設定範例（Phase 1 尚未接入程式執行流程）。
+# 預設設定範例。
 #
-# 目前程式實際讀取的設定來源是「系統環境變數 -> .env -> config.py 預設值」。
-# 這個 YAML 只是先把未來各子系統會用到的參數列出來，方便設計與討論，
-# 等到對應功能實作時，才會加入真正的 YAML loader。
+# 重要：Phase 2 的實際執行設定仍以 pydantic-settings 為準，
+# 讀取順序為「系統環境變數 -> .env -> app/core/config.py 的預設值」。
+# 本 YAML 尚未接入程式執行流程，目前僅作為參數設計的整體參考。
+# 若要調整實際行為，請修改 .env（可從 .env.example 複製）。
 
 app:
   name: Medical Local RAG
   version: 0.1.0
+  env: development
+  log_level: INFO
 
+# 資料目錄（已在 Phase 2 接入，實際值由 .env 的 RAW_DATA_DIR / PROCESSED_DATA_DIR 決定）
+data:
+  raw_dir: data/raw
+  processed_dir: data/processed
+
+# 上傳限制（已在 Phase 2 接入，實際值由 .env 的 MAX_UPLOAD_SIZE_MB 決定）
+upload:
+  max_size_mb: 20
+  allowed_extensions:
+    - .txt
+    - .pdf
+    - .docx
+
+# 切塊參數（已在 Phase 2 接入，實際值由 .env 決定）
+# 單位為「字元數」，不是 token。token 計量要等 Phase 3 引入實際 tokenizer 後才有意義。
 chunking:
   chunk_size: 500
   chunk_overlap: 100
+  min_chunk_size: 50
+
+# --- 以下為未來 Phase 的設計草稿，尚未實作 ---
 
 retrieval:
   top_k: 5

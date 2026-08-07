@@ -34,6 +34,10 @@ Thumbs.db
 desktop.ini
 
 # 本地資料與模型（保留資料夾本身）
+#
+# 醫療資料安全：data/raw 與 data/processed 可能含有病歷或其他敏感內容，
+# 絕對不可進入版本控制。一旦推上遠端（尤其是公開 repo），
+# 即使之後刪除檔案，commit 歷史中仍然找得到。
 vector_db/*
 !vector_db/.gitkeep
 models/*
@@ -42,3 +46,5 @@ data/raw/*
 !data/raw/.gitkeep
 data/processed/*
 !data/processed/.gitkeep
+data/evaluation/*
+!data/evaluation/.gitkeep
