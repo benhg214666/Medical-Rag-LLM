@@ -79,6 +79,7 @@ def build_chunk_id(
     paragraph_number: int | None,
     chunk_index: int,
     text: str,
+    document_id: str | None = None,
 ) -> str:
     """產生確定性（deterministic）的 chunk 識別碼。
 
@@ -92,10 +93,13 @@ def build_chunk_id(
     Returns:
         16 個字元的十六進位字串。
     """
+    # 正式 ingestion 流程會傳入 document_id，因此 chunk ID 不受檔名影響。
+    # 若是舊測試或單獨使用 chunker，沒有 document_id 時則沿用舊識別方式。
+    document_identity = document_id or f"{source}|{file_name}"
+
     payload = "|".join(
         [
-            source,
-            file_name,
+            document_identity,
             str(page_number),
             str(paragraph_number),
             str(chunk_index),
@@ -195,12 +199,88 @@ def _merge_trailing_short_span(
     return spans[:-2] + [(previous_start, last_end)]
 
 
+def _merge_docx_group(
+    documents: list[LoadedDocument],
+) -> LoadedDocument:
+    """將一組相鄰 DOCX 段落合併成一個可切塊的文件單位。
+
+    多段合併時，以換行保留原本的段落邊界，
+    並在 metadata 中記錄原始段落範圍。
+    """
+    if len(documents) == 1:
+        return documents[0]
+
+    first = documents[0]
+    last = documents[-1]
+
+    metadata = dict(first.metadata)
+    metadata["paragraph_start"] = first.paragraph_number
+    metadata["paragraph_end"] = last.paragraph_number
+
+    return LoadedDocument(
+        text="\n".join(document.text for document in documents),
+        source=first.source,
+        file_name=first.file_name,
+        file_type=first.file_type,
+        page_number=None,
+        # 為了與既有 schema 相容，paragraph_number 保留起始段落。
+        paragraph_number=first.paragraph_number,
+        metadata=metadata,
+    )
+
+
+def _merge_short_docx_documents(
+    documents: list[LoadedDocument],
+    min_chunk_size: int,
+) -> list[LoadedDocument]:
+    """在 chunking 前合併相鄰且過短的 DOCX 段落。
+
+    loader 仍保留原始段落結構；只有在準備 chunk 時才合併，
+    因此格式解析與 chunking 的責任不會混在一起。
+    """
+    if min_chunk_size <= 0 or not documents:
+        return documents
+
+    # chunk_documents 正常情況下一次處理同一份文件。
+    # 若呼叫端傳入混合格式，就維持原狀，不跨格式合併。
+    if any(document.file_type != "docx" for document in documents):
+        return documents
+
+    groups: list[list[LoadedDocument]] = []
+    buffer: list[LoadedDocument] = []
+    buffer_length = 0
+
+    for document in documents:
+        if buffer:
+            # 合併時會在段落間加入一個換行字元。
+            buffer_length += 1
+
+        buffer.append(document)
+        buffer_length += len(document.text)
+
+        if buffer_length >= min_chunk_size:
+            groups.append(buffer)
+            buffer = []
+            buffer_length = 0
+
+    # 最後若剩下一小段，併入前一組，避免產生尾端超短 chunk。
+    if buffer:
+        if groups:
+            groups[-1].extend(buffer)
+        else:
+            # 整份 DOCX 本身就小於 min_chunk_size 時沒有其他內容可合併。
+            groups.append(buffer)
+
+    return [_merge_docx_group(group) for group in groups]
+
+
 def chunk_document(
     document: LoadedDocument,
     chunk_size: int = DEFAULT_CHUNK_SIZE,
     chunk_overlap: int = DEFAULT_CHUNK_OVERLAP,
     min_chunk_size: int = DEFAULT_MIN_CHUNK_SIZE,
     start_index: int = 0,
+    document_id: str | None = None,
 ) -> list[DocumentChunk]:
     """將單一 LoadedDocument 切成多個 DocumentChunk。
 
@@ -240,6 +320,7 @@ def chunk_document(
                     paragraph_number=document.paragraph_number,
                     chunk_index=chunk_index,
                     text=chunk_text,
+                    document_id=document_id,
                 ),
                 text=chunk_text,
                 source=document.source,
@@ -262,6 +343,7 @@ def chunk_documents(
     chunk_size: int = DEFAULT_CHUNK_SIZE,
     chunk_overlap: int = DEFAULT_CHUNK_OVERLAP,
     min_chunk_size: int = DEFAULT_MIN_CHUNK_SIZE,
+    document_id: str | None = None,
 ) -> list[DocumentChunk]:
     """將多個 LoadedDocument 切塊，chunk_index 跨單位連續編號。
 
@@ -273,14 +355,21 @@ def chunk_documents(
     """
     validate_chunk_config(chunk_size, chunk_overlap, min_chunk_size)
 
+    prepared_documents = _merge_short_docx_documents(
+        documents,
+        min_chunk_size,
+    )
+
+
     all_chunks: list[DocumentChunk] = []
-    for document in documents:
+    for document in prepared_documents:
         chunks = chunk_document(
             document,
             chunk_size=chunk_size,
             chunk_overlap=chunk_overlap,
             min_chunk_size=min_chunk_size,
             start_index=len(all_chunks),
+            document_id=document_id,
         )
         all_chunks.extend(chunks)
 

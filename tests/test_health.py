@@ -31,8 +31,22 @@ def test_health_status_is_healthy() -> None:
     assert response.json() == {"status": "healthy"}
 
 
-@pytest.mark.parametrize("module", ["query", "documents", "models"])
-def test_module_status_endpoints(module: str) -> None:
-    response = client.get(f"/api/{module}/status")
+@pytest.mark.parametrize(
+    ("module_name", "expected_status"),
+    [
+        ("query", "not_implemented"),
+        ("models", "not_implemented"),
+        ("documents", "available"),
+    ],
+)
+def test_module_status_endpoints(
+    module_name: str,
+    expected_status: str,
+) -> None:
+    response = client.get(f"/api/{module_name}/status")
+
     assert response.status_code == 200
-    assert response.json() == {"module": module, "status": "not_implemented"}
+    assert response.json() == {
+        "module": module_name,
+        "status": expected_status,
+    }

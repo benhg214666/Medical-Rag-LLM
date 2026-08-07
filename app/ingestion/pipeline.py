@@ -184,6 +184,7 @@ def ingest_document(
         chunk_size=settings.chunk_size,
         chunk_overlap=settings.chunk_overlap,
         min_chunk_size=settings.min_chunk_size,
+        document_id=document_id,
     )
 
     if not chunks:
@@ -215,8 +216,7 @@ def ingest_document(
     )
 
     if write_output:
-        safe_stem = Path(sanitize_filename(file_path.name)).stem
-        output_name = f"{safe_stem}_{document_id[:8]}.json"
+        output_name = f"{document_id}.json"
         output_path = settings.processed_data_dir / output_name
 
         # 先設定 output_file 再寫檔，讓 JSON 內容包含自己的相對路徑

@@ -301,3 +301,50 @@ class TestChunkDocuments:
         ]
         chunks = chunk_documents(documents, 100, 20, 10)
         assert all(c.text.strip() for c in chunks)
+
+    def test_short_docx_paragraphs_are_merged_with_paragraph_range(self) -> None:
+        documents = [
+            make_document(
+                "主訴：病人表示胸痛已持續三天，活動時症狀明顯加劇。",
+                source="clinical_note.docx",
+                file_name="clinical_note.docx",
+                file_type="docx",
+                paragraph_number=1,
+            ),
+            make_document(
+                "生命徵象：血壓 120/80 mmHg，心跳每分鐘 78 次。",
+                source="clinical_note.docx",
+                file_name="clinical_note.docx",
+                file_type="docx",
+                paragraph_number=2,
+            ),
+            make_document(
+                "處置：給予 Aspirin 100 mg，並安排後續心電圖檢查。",
+                source="clinical_note.docx",
+                file_name="clinical_note.docx",
+                file_type="docx",
+                paragraph_number=3,
+            ),
+        ]
+
+        chunks = chunk_documents(
+            documents,
+            chunk_size=500,
+            chunk_overlap=50,
+            min_chunk_size=50,
+            document_id="test-document-id",
+        )
+
+        assert len(chunks) == 1
+
+        chunk = chunks[0]
+
+        assert "主訴：" in chunk.text
+        assert "生命徵象：" in chunk.text
+        assert "處置：" in chunk.text
+
+        assert len(chunk.text) >= 50
+
+        assert chunk.paragraph_number == 1
+        assert chunk.metadata["paragraph_start"] == 1
+        assert chunk.metadata["paragraph_end"] == 3

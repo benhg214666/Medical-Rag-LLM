@@ -47,7 +47,8 @@ def make_txt_upload(
 
 
 class TestPhase1Compatibility:
-    """Phase 1 的 endpoint 不可被破壞。"""
+    """確認 Phase 1 的既有端點仍可正常使用。"""
+
 
     def test_root_still_works(self, client: TestClient) -> None:
         response = client.get("/")
@@ -61,15 +62,28 @@ class TestPhase1Compatibility:
         assert response.status_code == 200
         assert response.json() == {"status": "healthy"}
 
-    @pytest.mark.parametrize("module", ["query", "documents", "models"])
+        
+    @pytest.mark.parametrize(
+        ("module_name", "expected_status"),
+        [
+            ("query", "not_implemented"),
+            ("models", "not_implemented"),
+            ("documents", "available"),
+        ],
+    )
     def test_module_status_endpoints_still_work(
-        self, client: TestClient, module: str
+        self,
+        client: TestClient,
+        module_name: str,
+        expected_status: str,
     ) -> None:
-        response = client.get(f"/api/{module}/status")
+        response = client.get(f"/api/{module_name}/status")
 
         assert response.status_code == 200
-        assert response.json() == {"module": module, "status": "not_implemented"}
-
+        assert response.json() == {
+            "module": module_name,
+            "status": expected_status,
+        }
 
 class TestSuccessfulUpload:
     """成功上傳的行為。"""
@@ -301,8 +315,14 @@ class TestFilenameSanitization:
         assert response.status_code == 200
         assert response.json()["file_name"] == "evil.txt"
         # 檔案必須留在指定目錄內，不可跳脫
-        assert (test_settings.raw_data_dir / "evil.txt").exists()
+        raw_files = list(test_settings.raw_data_dir.glob("evil_*.txt"))
 
+        assert len(raw_files) == 1
+        assert raw_files[0].parent == test_settings.raw_data_dir
+        assert raw_files[0].suffix == ".txt"
+        assert ".." not in raw_files[0].name
+        assert "/" not in raw_files[0].name
+        assert "\\" not in raw_files[0].name
 
 class TestIdempotency:
     """重複上傳相同內容。"""

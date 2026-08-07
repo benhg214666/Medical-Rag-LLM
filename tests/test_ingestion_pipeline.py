@@ -188,6 +188,33 @@ class TestDeterminism:
         # document_id 依內容計算，可用來偵測重複上傳
         assert compute_document_id(first_path) == compute_document_id(second_path)
 
+    def test_same_content_different_name_shares_chunk_ids_and_output(
+        self,
+        tmp_path: Path,
+        settings: Settings,
+    ) -> None:
+        content = "病患主訴胸痛，血壓 120/80 mmHg。" * 40
+
+        first_path = tmp_path / "name_a.txt"
+        second_path = tmp_path / "name_b.txt"
+
+        first_path.write_text(content, encoding="utf-8")
+        second_path.write_text(content, encoding="utf-8")
+
+        first = ingest_document(first_path, settings)
+        second = ingest_document(second_path, settings)
+
+        assert first.document_id == second.document_id
+
+        assert [chunk.chunk_id for chunk in first.chunks] == [
+            chunk.chunk_id for chunk in second.chunks
+        ]
+
+        output_files = list(settings.processed_data_dir.glob("*.json"))
+
+        assert len(output_files) == 1
+        assert output_files[0].name == f"{first.document_id}.json"
+
     def test_different_content_yields_different_id(self, tmp_path: Path) -> None:
         first_path = tmp_path / "a.txt"
         second_path = tmp_path / "b.txt"

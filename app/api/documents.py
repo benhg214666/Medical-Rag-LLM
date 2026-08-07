@@ -11,6 +11,7 @@
   500 未預期錯誤或寫檔失敗
 """
 
+import hashlib
 import logging
 from pathlib import Path
 
@@ -43,11 +44,24 @@ router = APIRouter(prefix="/api/documents", tags=["documents"])
 _MAX_PREVIEW_CHUNKS = 3
 _PREVIEW_CHAR_LIMIT = 200
 
+def _build_document_id(content: bytes) -> str:
+    """依檔案內容產生穩定的 SHA-256 文件識別碼。"""
+    return hashlib.sha256(content).hexdigest()
+
+
+def _build_raw_file_name(safe_name: str, document_id: str) -> str:
+    """建立不易覆蓋的原始檔名。
+
+    例如：
+        note.txt -> note_a31f829c.txt
+    """
+    path = Path(safe_name)
+    return f"{path.stem}_{document_id[:8]}{path.suffix.lower()}"
 
 @router.get("/status", response_model=ModuleStatusResponse)
 def get_documents_status() -> ModuleStatusResponse:
     """回報 documents 模組的實作狀態。"""
-    return ModuleStatusResponse(module="documents", status="not_implemented")
+    return ModuleStatusResponse(module="documents", status="available")
 
 
 def _validate_extension(file_name: str) -> str:
@@ -143,13 +157,16 @@ async def upload_document(
             ),
         )
 
+    document_id = _build_document_id(content)
+    raw_file_name = _build_raw_file_name(safe_name, document_id)
+
     ensure_data_directories(settings)
-    raw_path = settings.raw_data_dir / safe_name
+    raw_path = settings.raw_data_dir / raw_file_name
 
     try:
         raw_path.write_bytes(content)
     except OSError as exc:
-        logger.exception("儲存上傳檔案失敗：%s", safe_name)
+        logger.exception("儲存上傳檔案失敗：%s", raw_file_name)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="伺服器無法儲存上傳的檔案，請稍後再試或聯絡管理員。",
@@ -169,14 +186,14 @@ async def upload_document(
         ) from exc
     except IngestionError as exc:
         # 內部 log 保留完整 traceback，對外只給概括訊息，不洩漏路徑或堆疊
-        logger.exception("處理文件時發生匯入錯誤：%s", safe_name)
+        logger.exception("處理文件時發生匯入錯誤：%s", raw_file_name)
         _remove_file_quietly(raw_path)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="伺服器處理文件時發生錯誤，請稍後再試或聯絡管理員。",
         ) from exc
     except Exception as exc:
-        logger.exception("處理文件時發生未預期錯誤：%s", safe_name)
+        logger.exception("處理文件時發生未預期錯誤：%s", raw_file_name)
         _remove_file_quietly(raw_path)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
