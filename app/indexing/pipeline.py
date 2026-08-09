@@ -2,6 +2,7 @@
 
 import json
 import logging
+import math
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -71,6 +72,56 @@ class IndexingPipeline:
                 "processed JSON 結構不符合 Phase 2 schema"
             ) from exc
 
+    @staticmethod
+    def _validate_embedding_vectors(
+        vectors: object,
+        expected_count: int,
+        expected_dimension: int,
+    ) -> int:
+        """驗證 embedding 數量、維度、型別與有限值。"""
+        if expected_dimension <= 0:
+            raise IndexingError(
+                "embedding backend 宣告的向量維度無效"
+            )
+
+        if not isinstance(vectors, list):
+            raise IndexingError(
+                "embedding backend 必須回傳 list"
+            )
+
+        if len(vectors) != expected_count:
+            raise IndexingError(
+                "embedding backend 回傳的向量數量不正確"
+            )
+
+        if not vectors:
+            raise IndexingError(
+                "embedding backend 未回傳任何向量"
+            )
+
+        for vector in vectors:
+            if not isinstance(vector, list):
+                raise IndexingError(
+                    "每個 embedding 向量都必須是 list"
+                )
+
+            if len(vector) != expected_dimension:
+                raise IndexingError(
+                    "embedding 向量維度與 backend 宣告不一致"
+                )
+
+            for value in vector:
+                if (
+                    isinstance(value, bool)
+                    or not isinstance(value, (int, float))
+                    or not math.isfinite(float(value))
+                ):
+                    raise IndexingError(
+                        "embedding 向量包含非數字或非有限數值"
+                    )
+
+        return expected_dimension
+
     def index_payload(self, payload: Any) -> IndexingResult:
         ingestion = self._validate_payload(payload)
         started_at = datetime.now(timezone.utc)
@@ -94,6 +145,9 @@ class IndexingPipeline:
                     ingestion.document_id
                 )
             )
+            expected_dimension = (
+                self.embedding_backend.dimension
+            )
 
             for start in range(
                 0,
@@ -107,40 +161,32 @@ class IndexingPipeline:
                     [chunk.text for chunk in batch]
                 )
 
-                if len(vectors) != len(batch):
+                current_dimension = (
+                    self._validate_embedding_vectors(
+                        vectors=vectors,
+                        expected_count=len(batch),
+                        expected_dimension=expected_dimension,
+                    )
+                )
+
+                if dimension not in {0, current_dimension}:
                     raise IndexingError(
-                        "embedding backend 回傳的向量數量不正確"
+                        "不同 batch 的 embedding 維度不一致"
                     )
 
-                if vectors:
-                    current_dimension = len(vectors[0])
+                dimension = current_dimension
 
-                    if current_dimension <= 0 or any(
-                        len(vector) != current_dimension
-                        for vector in vectors
-                    ):
-                        raise IndexingError(
-                            "embedding backend 回傳無效的向量維度"
-                        )
-
-                    if dimension not in {0, current_dimension}:
-                        raise IndexingError(
-                            "不同 batch 的 embedding 維度不一致"
-                        )
-
-                    dimension = current_dimension
-
-                    if completed == 0:
-                        self.vector_store.ensure_embedding_compatibility(
-                            model_name=(
-                                self.embedding_backend.model_name
-                            ),
-                            dimension=current_dimension,
-                            normalized=(
-                                self.embedding_backend
-                                .normalizes_embeddings
-                            ),
-                        )
+                if completed == 0:
+                    self.vector_store.ensure_embedding_compatibility(
+                        model_name=(
+                            self.embedding_backend.model_name
+                        ),
+                        dimension=current_dimension,
+                        normalized=(
+                            self.embedding_backend
+                            .normalizes_embeddings
+                        ),
+                    )
 
                 batch_chunk_ids = {
                     chunk.chunk_id for chunk in batch

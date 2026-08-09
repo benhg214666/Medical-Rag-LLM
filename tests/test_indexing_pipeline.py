@@ -178,3 +178,46 @@ def test_second_batch_failure_rolls_back_new_chunks(
         failing_pipeline.index_payload(failing_payload)
 
     assert set(store.get_records()["ids"]) == existing_ids
+
+@pytest.mark.parametrize(
+    "invalid_vectors",
+    [
+        [[float("nan"), 0.0, 0.0, 0.0]],
+        [[float("inf"), 0.0, 0.0, 0.0]],
+        [["invalid", 0.0, 0.0, 0.0]],
+        [[0.1, 0.2, 0.3]],
+    ],
+    ids=[
+        "nan",
+        "infinity",
+        "non-numeric",
+        "wrong-dimension",
+    ],
+)
+def test_invalid_vectors_are_rejected_before_write(
+    tmp_path: Path,
+    invalid_vectors: list[list[object]],
+) -> None:
+    class InvalidVectorBackend(FakeEmbeddingBackend):
+        def embed_documents(
+            self,
+            texts: list[str],
+        ) -> list[list[float]]:
+            return invalid_vectors  # type: ignore[return-value]
+
+    store = ChromaStore(
+        tmp_path / "invalid-vector-db",
+        "medical_test",
+    )
+    pipeline = IndexingPipeline(
+        InvalidVectorBackend(),
+        store,
+    )
+
+    with pytest.raises(
+        IndexingError,
+        match="數值|維度",
+    ):
+        pipeline.index_payload(payload())
+
+    assert store.count() == 0
