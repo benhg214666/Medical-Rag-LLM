@@ -27,3 +27,8 @@ class EmbeddingBackend(ABC):
     @abstractmethod
     def model_name(self) -> str:
         """模型識別名稱。"""
+    
+    @property
+    @abstractmethod
+    def normalizes_embeddings(self) -> bool:
+        """回傳輸出的向量是否已做 L2 normalization。"""

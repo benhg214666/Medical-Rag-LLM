@@ -1,7 +1,10 @@
 """Persistent Chroma store 測試。"""
-
 from pathlib import Path
 
+import pytest
+
+
+from app.vector_store.base import VectorStoreError
 from app.ingestion.models import DocumentChunk
 from app.vector_store.chroma_store import ChromaStore
 
@@ -44,3 +47,86 @@ def test_persistent_upsert_metadata_and_delete(tmp_path: Path) -> None:
     assert reopened.count() == 1
     reopened.delete_collection()
     assert not reopened.collection_exists()
+
+
+def test_embedding_contract_persists_after_reopen(
+    tmp_path: Path,
+) -> None:
+    db_dir = tmp_path / "contract-db"
+
+    store = ChromaStore(db_dir, "contract_test")
+    store.ensure_embedding_compatibility(
+        model_name="intfloat/multilingual-e5-small",
+        dimension=384,
+        normalized=True,
+    )
+
+    reopened = ChromaStore(db_dir, "contract_test")
+    reopened.ensure_embedding_compatibility(
+        model_name="intfloat/multilingual-e5-small",
+        dimension=384,
+        normalized=True,
+    )
+
+    metadata = reopened._collection.metadata
+    assert metadata["embedding_model"] == (
+        "intfloat/multilingual-e5-small"
+    )
+    assert metadata["embedding_dimension"] == 384
+    assert metadata["embedding_normalized"] is True
+    assert metadata["distance_metric"] == "cosine"
+    assert metadata["schema_version"] == 1
+
+
+@pytest.mark.parametrize(
+    ("model_name", "dimension", "normalized"),
+    [
+        ("another/model", 384, True),
+        ("intfloat/multilingual-e5-small", 768, True),
+        ("intfloat/multilingual-e5-small", 384, False),
+    ],
+)
+def test_incompatible_embedding_contract_is_rejected(
+    tmp_path: Path,
+    model_name: str,
+    dimension: int,
+    normalized: bool,
+) -> None:
+    db_dir = tmp_path / "incompatible-db"
+
+    store = ChromaStore(db_dir, "contract_test")
+    store.ensure_embedding_compatibility(
+        model_name="intfloat/multilingual-e5-small",
+        dimension=384,
+        normalized=True,
+    )
+
+    reopened = ChromaStore(db_dir, "contract_test")
+
+    with pytest.raises(VectorStoreError, match="不相容"):
+        reopened.ensure_embedding_compatibility(
+            model_name=model_name,
+            dimension=dimension,
+            normalized=normalized,
+        )
+
+
+def test_nonempty_legacy_collection_without_contract_is_rejected(
+    tmp_path: Path,
+) -> None:
+    store = ChromaStore(
+        tmp_path / "legacy-db",
+        "legacy_collection",
+    )
+    store.add_chunks(
+        [make_chunk()],
+        [[0.1, 0.2, 0.3, 0.4]],
+        "doc-1",
+    )
+
+    with pytest.raises(VectorStoreError, match="缺少"):
+        store.ensure_embedding_compatibility(
+            model_name="intfloat/multilingual-e5-small",
+            dimension=4,
+            normalized=True,
+        )

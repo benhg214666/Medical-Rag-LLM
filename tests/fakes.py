@@ -16,6 +16,10 @@ class FakeEmbeddingBackend(EmbeddingBackend):
     @property
     def model_name(self) -> str:
         return "test/fake-embedding"
+    
+    @property
+    def normalizes_embeddings(self) -> bool:
+        return False
 
     def _vector(self, text: str) -> list[float]:
         digest = hashlib.sha256(text.encode("utf-8")).digest()

@@ -18,6 +18,15 @@ class VectorStore(ABC):
         """目前 collection 名稱。"""
 
     @abstractmethod
+    def ensure_embedding_compatibility(
+        self,
+        model_name: str,
+        dimension: int,
+        normalized: bool,
+    ) -> None:
+        """建立或驗證 collection 的 embedding 相容性合約。"""
+
+    @abstractmethod
     def add_chunks(
         self,
         chunks: list[DocumentChunk],

@@ -128,3 +128,12 @@ def test_model_is_loaded_once_under_concurrency(
 
     assert dimensions == [2] * 8
     assert constructor_calls == 1
+
+def test_backends_report_normalization_contract() -> None:
+    local_backend = LocalEmbeddingBackend(
+        "intfloat/multilingual-e5-small"
+    )
+    fake_backend = FakeEmbeddingBackend()
+
+    assert local_backend.normalizes_embeddings is True
+    assert fake_backend.normalizes_embeddings is False

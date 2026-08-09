@@ -6,6 +6,8 @@ from typing import Any
 
 from app.ingestion.models import DocumentChunk
 from app.vector_store.base import VectorStore, VectorStoreError
+_COLLECTION_SCHEMA_VERSION = 1
+_DISTANCE_METRIC = "cosine"
 
 def sanitize_metadata(metadata: dict[str, Any]) -> dict[str, str | int | float | bool]:
     """扁平化 metadata，只保留 Chroma 支援的 scalar 值。"""
@@ -44,7 +46,12 @@ class ChromaStore(VectorStore):
             self._client = chromadb.PersistentClient(path=str(self.persist_directory))
             self._collection = self._client.get_or_create_collection(
                 name=collection_name,
-                metadata={"hnsw:space": "cosine"},
+                metadata={
+                    # Chroma 的 hnsw:space 建立後不可修改。
+                    "hnsw:space": _DISTANCE_METRIC,
+                    "distance_metric": _DISTANCE_METRIC,
+                    "schema_version": _COLLECTION_SCHEMA_VERSION,
+                },
             )
         except Exception as exc:
             raise VectorStoreError("無法初始化本地 Chroma vector store") from exc
@@ -67,6 +74,71 @@ class ChromaStore(VectorStore):
             return int(self._collection.count())
         except Exception as exc:
             raise VectorStoreError("無法計算 Chroma records") from exc
+
+    def ensure_embedding_compatibility(
+        self,
+        model_name: str,
+        dimension: int,
+        normalized: bool,
+    ) -> None:
+        """建立或驗證 collection 的 embedding 相容性合約。"""
+        if not model_name.strip():
+            raise VectorStoreError("embedding model name 不可為空白")
+        if dimension <= 0:
+            raise VectorStoreError("embedding dimension 必須大於 0")
+
+        expected = {
+            "distance_metric": _DISTANCE_METRIC,
+            "schema_version": _COLLECTION_SCHEMA_VERSION,
+            "embedding_model": model_name,
+            "embedding_dimension": dimension,
+            "embedding_normalized": normalized,
+        }
+
+        try:
+            current = dict(self._collection.metadata or {})
+            missing_fields = [
+                key for key in expected if key not in current
+            ]
+
+            if missing_fields:
+                if self.count() != 0:
+                    raise VectorStoreError(
+                        "既有 collection 含有 records，但缺少 embedding "
+                        "相容性資訊；請建立新 collection 或重新建立索引"
+                    )
+
+                # hnsw:space 是 Chroma 的 immutable 建立參數，
+                # 不可再次傳入 modify()。
+                modifiable_current = {
+                    key: value
+                    for key, value in current.items()
+                    if key != "hnsw:space"
+                }
+
+                self._collection.modify(
+                    metadata={**modifiable_current, **expected}
+                )
+                return
+
+            mismatches = [
+                key
+                for key, expected_value in expected.items()
+                if current.get(key) != expected_value
+            ]
+
+            if mismatches:
+                fields = ", ".join(mismatches)
+                raise VectorStoreError(
+                    f"collection embedding 設定不相容：{fields}"
+                )
+
+        except VectorStoreError:
+            raise
+        except Exception as exc:
+            raise VectorStoreError(
+                "無法驗證 Chroma collection embedding 設定"
+            ) from exc
 
     def add_chunks(
         self,

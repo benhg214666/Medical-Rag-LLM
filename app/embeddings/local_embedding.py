@@ -93,3 +93,8 @@ class LocalEmbeddingBackend(EmbeddingBackend):
             raise EmbeddingError("查詢文字不可為空白")
         prepared = f"query: {text}" if self._uses_e5_prefix() else text
         return self._encode([prepared])[0]
+    
+    @property
+    def normalizes_embeddings(self) -> bool:
+        """Sentence Transformers encode 固定啟用 normalization。"""
+        return True

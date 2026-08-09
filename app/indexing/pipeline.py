@@ -102,7 +102,21 @@ class IndexingPipeline:
                     if dimension not in {0, current_dimension}:
                         raise IndexingError("不同 batch 的 embedding 維度不一致")
                     dimension = current_dimension
-                self.vector_store.add_chunks(batch, vectors, ingestion.document_id)
+
+                    if completed == 0:
+                        self.vector_store.ensure_embedding_compatibility(
+                            model_name=self.embedding_backend.model_name,
+                            dimension=current_dimension,
+                            normalized=(
+                                self.embedding_backend.normalizes_embeddings
+                            ),
+                        )
+
+                self.vector_store.add_chunks(
+                    batch,
+                    vectors,
+                    ingestion.document_id,
+                )
                 completed += len(batch)
         except (EmbeddingError, VectorStoreError, IndexingError) as exc:
             logger.exception(

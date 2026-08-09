@@ -25,6 +25,13 @@ class MemoryVectorStore(VectorStore):
     def collection_name(self) -> str:
         return "api_test"
 
+    def ensure_embedding_compatibility(
+        self,
+        model_name: str,
+        dimension: int,
+        normalized: bool,
+    ) -> None:
+        return None
     def add_chunks(self, chunks, embeddings, document_id) -> None:
         for chunk, embedding in zip(chunks, embeddings, strict=True):
             self.records[chunk.chunk_id] = (chunk, embedding)
