@@ -8,6 +8,22 @@ from app.ingestion.models import DocumentChunk
 from app.vector_store.base import VectorStore, VectorStoreError
 _COLLECTION_SCHEMA_VERSION = 1
 _DISTANCE_METRIC = "cosine"
+_RESERVED_CHUNK_METADATA_KEYS = frozenset(
+    {
+        "document_id",
+        "chunk_id",
+        "text",
+        "source",
+        "file_name",
+        "file_type",
+        "page_number",
+        "paragraph_number",
+        "chunk_index",
+        "start_char",
+        "end_char",
+        "metadata",
+    }
+)
 
 def sanitize_metadata(metadata: dict[str, Any]) -> dict[str, str | int | float | bool]:
     """扁平化 metadata，只保留 Chroma 支援的 scalar 值。"""
@@ -151,10 +167,29 @@ class ChromaStore(VectorStore):
         if not chunks:
             return
         metadatas = []
+
         for chunk in chunks:
-            raw = chunk.model_dump(exclude={"chunk_id", "text", "metadata"})
-            raw["document_id"] = document_id
+            conflicting_keys = sorted(
+                _RESERVED_CHUNK_METADATA_KEYS.intersection(
+                    chunk.metadata
+                )
+            )
+
+            if conflicting_keys:
+                fields = ", ".join(conflicting_keys)
+                raise VectorStoreError(
+                    "chunk metadata 不可覆蓋系統欄位："
+                    f"{fields}"
+                )
+
+            raw = chunk.model_dump(
+                exclude={"chunk_id", "text", "metadata"}
+            )
             raw.update(chunk.metadata)
+
+            # 系統 document_id 最後設定，作為額外防護。
+            raw["document_id"] = document_id
+
             metadatas.append(sanitize_metadata(raw))
         try:
             self._collection.upsert(
@@ -164,7 +199,9 @@ class ChromaStore(VectorStore):
                 metadatas=metadatas,
             )
         except Exception as exc:
-            raise VectorStoreError("寫入 Chroma records 失敗") from exc
+            raise VectorStoreError(
+                "寫入 Chroma records 失敗"
+            ) from exc
 
     def delete_stale_chunks(
         self,

@@ -241,4 +241,42 @@ def test_get_document_ids_and_delete_by_ids(
         "other-1"
     }
 
-    
+@pytest.mark.parametrize(
+    "reserved_key",
+    [
+        "document_id",
+        "source",
+        "chunk_index",
+        "page_number",
+    ],
+)
+def test_reserved_metadata_cannot_override_system_fields(
+    tmp_path: Path,
+    reserved_key: str,
+) -> None:
+    store = ChromaStore(
+        tmp_path / f"reserved-{reserved_key}",
+        "reserved_test",
+    )
+    store.ensure_embedding_compatibility(
+        model_name="test/model",
+        dimension=4,
+        normalized=False,
+    )
+
+    chunk = make_chunk().model_copy(
+        update={
+            "metadata": {
+                reserved_key: "spoofed",
+            }
+        }
+    )
+
+    with pytest.raises(VectorStoreError, match="不可覆蓋"):
+        store.add_chunks(
+            [chunk],
+            [[0.1, 0.2, 0.3, 0.4]],
+            "trusted-document-id",
+        )
+
+    assert store.count() == 0
