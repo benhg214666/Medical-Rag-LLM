@@ -46,3 +46,27 @@ class VectorStore(ABC):
     @abstractmethod
     def collection_exists(self) -> bool:
         """回傳 collection 是否存在。"""
+
+    @abstractmethod
+    def delete_stale_chunks(
+        self,
+        document_id: str,
+        keep_chunk_ids: set[str],
+    ) -> int:
+        """刪除同一 document 中不在 keep_chunk_ids 的舊 records。"""
+
+    
+
+    @abstractmethod
+    def get_document_chunk_ids(
+        self,
+        document_id: str,
+    ) -> set[str]:
+        """取得指定 document 目前已有的全部 chunk IDs。"""
+
+    @abstractmethod
+    def delete_chunks_by_ids(
+        self,
+        chunk_ids: set[str],
+    ) -> int:
+        """依 IDs 刪除 chunks，回傳實際刪除數量。"""

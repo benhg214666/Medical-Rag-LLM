@@ -4,9 +4,14 @@ from pathlib import Path
 
 import pytest
 
-from app.indexing.pipeline import IndexingPipeline, ProcessedDocumentError
+from app.indexing.pipeline import (
+    IndexingError,
+    IndexingPipeline,
+    ProcessedDocumentError,
+)
 from app.vector_store.chroma_store import ChromaStore
 from tests.fakes import FakeEmbeddingBackend
+from app.embeddings.base import EmbeddingError
 
 
 def payload(text: str = "病患主訴胸痛。") -> dict:
@@ -69,3 +74,107 @@ def test_malformed_payload_fails_before_writing(
     with pytest.raises(ProcessedDocumentError):
         pipeline.index_payload(bad_payload)
     assert store.count() == 0
+
+
+def test_reindex_removes_stale_chunks(
+    tmp_path: Path,
+) -> None:
+    store = ChromaStore(
+        tmp_path / "stale-pipeline-db",
+        "medical_test",
+    )
+    pipeline = IndexingPipeline(
+        FakeEmbeddingBackend(),
+        store,
+        batch_size=1,
+    )
+
+    first_payload = payload("相同文件內容。")
+    second_old_chunk = dict(first_payload["chunks"][0])
+    second_old_chunk.update(
+        {
+            "chunk_id": "2222222222222222",
+            "chunk_index": 1,
+        }
+    )
+    first_payload["chunks"].append(second_old_chunk)
+    first_payload["statistics"]["chunk_count"] = 2
+    first_payload["statistics"]["total_characters"] *= 2
+
+    pipeline.index_payload(first_payload)
+
+    assert store.count() == 2
+
+    replacement_payload = payload("相同文件內容。")
+    replacement_payload["chunks"][0]["chunk_id"] = (
+        "3333333333333333"
+    )
+
+    pipeline.index_payload(replacement_payload)
+
+    assert store.count() == 1
+    assert store.get_records()["ids"] == [
+        "3333333333333333"
+    ]
+def test_second_batch_failure_rolls_back_new_chunks(
+    tmp_path: Path,
+) -> None:
+    class FailingSecondBatchBackend(FakeEmbeddingBackend):
+        def __init__(self) -> None:
+            super().__init__()
+            self.calls = 0
+
+        def embed_documents(
+            self,
+            texts: list[str],
+        ) -> list[list[float]]:
+            self.calls += 1
+
+            if self.calls == 2:
+                raise EmbeddingError(
+                    "模擬第二個 batch embedding 失敗"
+                )
+
+            return super().embed_documents(texts)
+
+    store = ChromaStore(
+        tmp_path / "rollback-pipeline-db",
+        "medical_test",
+    )
+
+    good_pipeline = IndexingPipeline(
+        FakeEmbeddingBackend(),
+        store,
+        batch_size=1,
+    )
+    good_pipeline.index_payload(payload("既有內容。"))
+
+    existing_ids = set(store.get_records()["ids"])
+    assert len(existing_ids) == 1
+
+    failing_payload = payload("更新內容。")
+    failing_payload["chunks"][0]["chunk_id"] = (
+        "1111111111111111"
+    )
+
+    second_chunk = dict(failing_payload["chunks"][0])
+    second_chunk.update(
+        {
+            "chunk_id": "2222222222222222",
+            "chunk_index": 1,
+        }
+    )
+    failing_payload["chunks"].append(second_chunk)
+    failing_payload["statistics"]["chunk_count"] = 2
+    failing_payload["statistics"]["total_characters"] *= 2
+
+    failing_pipeline = IndexingPipeline(
+        FailingSecondBatchBackend(),
+        store,
+        batch_size=1,
+    )
+
+    with pytest.raises(IndexingError, match="已有 1 個"):
+        failing_pipeline.index_payload(failing_payload)
+
+    assert set(store.get_records()["ids"]) == existing_ids

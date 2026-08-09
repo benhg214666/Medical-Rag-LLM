@@ -76,6 +76,9 @@ class IndexingPipeline:
         started_at = datetime.now(timezone.utc)
         completed = 0
         dimension = 0
+        deleted_stale = 0
+        existing_chunk_ids: set[str] = set()
+        attempted_new_chunk_ids: set[str] = set()
         batch_count = (len(ingestion.chunks) + self.batch_size - 1) // self.batch_size
         logger.info(
             "開始 indexing：document_id=%s chunks=%d model=%s batches=%d collection=%s",
@@ -86,31 +89,65 @@ class IndexingPipeline:
             self.vector_store.collection_name,
         )
         try:
-            for start in range(0, len(ingestion.chunks), self.batch_size):
-                batch = ingestion.chunks[start : start + self.batch_size]
+            existing_chunk_ids = (
+                self.vector_store.get_document_chunk_ids(
+                    ingestion.document_id
+                )
+            )
+
+            for start in range(
+                0,
+                len(ingestion.chunks),
+                self.batch_size,
+            ):
+                batch = ingestion.chunks[
+                    start : start + self.batch_size
+                ]
                 vectors = self.embedding_backend.embed_documents(
                     [chunk.text for chunk in batch]
                 )
+
                 if len(vectors) != len(batch):
-                    raise IndexingError("embedding backend 回傳的向量數量不正確")
+                    raise IndexingError(
+                        "embedding backend 回傳的向量數量不正確"
+                    )
+
                 if vectors:
                     current_dimension = len(vectors[0])
+
                     if current_dimension <= 0 or any(
-                        len(vector) != current_dimension for vector in vectors
+                        len(vector) != current_dimension
+                        for vector in vectors
                     ):
-                        raise IndexingError("embedding backend 回傳無效的向量維度")
+                        raise IndexingError(
+                            "embedding backend 回傳無效的向量維度"
+                        )
+
                     if dimension not in {0, current_dimension}:
-                        raise IndexingError("不同 batch 的 embedding 維度不一致")
+                        raise IndexingError(
+                            "不同 batch 的 embedding 維度不一致"
+                        )
+
                     dimension = current_dimension
 
                     if completed == 0:
                         self.vector_store.ensure_embedding_compatibility(
-                            model_name=self.embedding_backend.model_name,
+                            model_name=(
+                                self.embedding_backend.model_name
+                            ),
                             dimension=current_dimension,
                             normalized=(
-                                self.embedding_backend.normalizes_embeddings
+                                self.embedding_backend
+                                .normalizes_embeddings
                             ),
                         )
+
+                batch_chunk_ids = {
+                    chunk.chunk_id for chunk in batch
+                }
+                attempted_new_chunk_ids.update(
+                    batch_chunk_ids - existing_chunk_ids
+                )
 
                 self.vector_store.add_chunks(
                     batch,
@@ -118,12 +155,38 @@ class IndexingPipeline:
                     ingestion.document_id,
                 )
                 completed += len(batch)
+
+            deleted_stale = self.vector_store.delete_stale_chunks(
+                document_id=ingestion.document_id,
+                keep_chunk_ids={
+                    chunk.chunk_id
+                    for chunk in ingestion.chunks
+                },
+            )
         except (EmbeddingError, VectorStoreError, IndexingError) as exc:
             logger.exception(
                 "Indexing 失敗：document_id=%s completed_chunks=%d；前批次可能已寫入",
                 ingestion.document_id,
                 completed,
             )
+            if attempted_new_chunk_ids:
+                try:
+                    rolled_back = (
+                        self.vector_store.delete_chunks_by_ids(
+                            attempted_new_chunk_ids
+                        )
+                    )
+                    logger.warning(
+                        "已回滾本次新增 chunks："
+                        "document_id=%s deleted=%d",
+                        ingestion.document_id,
+                        rolled_back,
+                    )
+                except VectorStoreError:
+                    logger.exception(
+                        "回滾新增 chunks 失敗：document_id=%s",
+                        ingestion.document_id,
+                    )
             if isinstance(exc, IndexingError):
                 raise
             raise IndexingError(
@@ -131,6 +194,15 @@ class IndexingPipeline:
             ) from exc
 
         elapsed_ms = (datetime.now(timezone.utc) - started_at).total_seconds() * 1000
+
+        if deleted_stale:
+            logger.info(
+                "已刪除過期 chunks：document_id=%s deleted=%d",
+                ingestion.document_id,
+                deleted_stale,
+            )
+
+
         logger.info(
             "Indexing 完成：document_id=%s chunks=%d dimension=%d 耗時=%.1fms",
             ingestion.document_id,

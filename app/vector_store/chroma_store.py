@@ -166,6 +166,80 @@ class ChromaStore(VectorStore):
         except Exception as exc:
             raise VectorStoreError("寫入 Chroma records 失敗") from exc
 
+    def delete_stale_chunks(
+        self,
+        document_id: str,
+        keep_chunk_ids: set[str],
+    ) -> int:
+        """刪除指定 document 已不再存在的舊 chunks。"""
+        if not document_id.strip():
+            raise VectorStoreError("document_id 不可為空白")
+
+        try:
+            records = self._collection.get(
+                where={"document_id": document_id},
+                include=["metadatas"],
+            )
+            stale_ids = [
+                record_id
+                for record_id in records["ids"]
+                if record_id not in keep_chunk_ids
+            ]
+
+            if stale_ids:
+                self._collection.delete(ids=stale_ids)
+
+            return len(stale_ids)
+
+        except Exception as exc:
+            raise VectorStoreError(
+                "刪除過期 Chroma records 失敗"
+            ) from exc
+
+    def get_document_chunk_ids(
+        self,
+        document_id: str,
+    ) -> set[str]:
+        if not document_id.strip():
+            raise VectorStoreError("document_id 不可為空白")
+
+        try:
+            records = self._collection.get(
+                where={"document_id": document_id},
+                include=["metadatas"],
+            )
+            return set(records["ids"])
+        except Exception as exc:
+            raise VectorStoreError(
+                "讀取 document chunk IDs 失敗"
+            ) from exc
+
+    def delete_chunks_by_ids(
+        self,
+        chunk_ids: set[str],
+    ) -> int:
+        if not chunk_ids:
+            return 0
+
+        try:
+            records = self._collection.get(
+                ids=sorted(chunk_ids),
+                include=["metadatas"],
+            )
+            existing_ids = set(records["ids"])
+
+            if existing_ids:
+                self._collection.delete(
+                    ids=sorted(existing_ids)
+                )
+
+            return len(existing_ids)
+        except Exception as exc:
+            raise VectorStoreError(
+                "依 IDs 刪除 Chroma records 失敗"
+            ) from exc
+
+
     def delete_collection(self) -> None:
         try:
             if self.collection_exists():

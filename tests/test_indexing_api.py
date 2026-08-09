@@ -19,7 +19,10 @@ from tests.test_indexing_pipeline import payload
 
 class MemoryVectorStore(VectorStore):
     def __init__(self) -> None:
-        self.records: dict[str, tuple[DocumentChunk, list[float]]] = {}
+        self.records: dict[
+            str,
+            tuple[DocumentChunk, list[float], str],
+        ] = {}
 
     @property
     def collection_name(self) -> str:
@@ -34,7 +37,51 @@ class MemoryVectorStore(VectorStore):
         return None
     def add_chunks(self, chunks, embeddings, document_id) -> None:
         for chunk, embedding in zip(chunks, embeddings, strict=True):
-            self.records[chunk.chunk_id] = (chunk, embedding)
+            self.records[chunk.chunk_id] = (
+                chunk,
+                embedding,
+                document_id,
+            )
+    def delete_stale_chunks(
+        self,
+        document_id: str,
+        keep_chunk_ids: set[str],
+    ) -> int:
+        stale_ids = [
+            chunk_id
+            for chunk_id, record in self.records.items()
+            if record[2] == document_id
+            and chunk_id not in keep_chunk_ids
+        ]
+
+        for chunk_id in stale_ids:
+            del self.records[chunk_id]
+
+        return len(stale_ids)
+
+
+
+
+    def get_document_chunk_ids(
+        self,
+        document_id: str,
+    ) -> set[str]:
+        return {
+            chunk_id
+            for chunk_id, record in self.records.items()
+            if record[2] == document_id
+        }
+
+    def delete_chunks_by_ids(
+        self,
+        chunk_ids: set[str],
+    ) -> int:
+        existing_ids = set(self.records).intersection(chunk_ids)
+
+        for chunk_id in existing_ids:
+            del self.records[chunk_id]
+
+        return len(existing_ids)
 
     def count(self) -> int:
         return len(self.records)
