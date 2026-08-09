@@ -181,6 +181,9 @@ class IndexingPipeline:
                         model_name=(
                             self.embedding_backend.model_name
                         ),
+                        model_revision=(
+                            self.embedding_backend.model_revision
+                        ),
                         dimension=current_dimension,
                         normalized=(
                             self.embedding_backend

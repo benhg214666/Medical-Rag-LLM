@@ -50,6 +50,9 @@ class Settings(BaseSettings):
     # --- Phase 3：Embedding 與本地向量資料庫 ---
     embedding_provider: str = "local"
     embedding_model_name: str = "intfloat/multilingual-e5-small"
+    embedding_model_revision: str = (
+        "614241f622f53c4eeff9890bdc4f31cfecc418b3"
+    )
     embedding_device: str = "cpu"
     embedding_batch_size: int = 32
     vector_store_provider: str = "chroma"

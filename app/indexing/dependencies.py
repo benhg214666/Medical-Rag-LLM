@@ -16,12 +16,14 @@ from app.vector_store.factory import create_vector_store
 def _get_cached_embedding_backend(
     provider: str,
     model_name: str,
+    model_revision: str,
     device: str,
 ) -> EmbeddingBackend:
     """依 embedding 設定共用 backend，避免每個 request 重新載入模型。"""
     backend_settings = Settings(
         embedding_provider=provider,
         embedding_model_name=model_name,
+        embedding_model_revision=model_revision,
         embedding_device=device,
     )
     return create_embedding_backend(backend_settings)
@@ -35,6 +37,7 @@ def get_indexing_pipeline(
         embedding_backend = _get_cached_embedding_backend(
             settings.embedding_provider.lower(),
             settings.embedding_model_name,
+            settings.embedding_model_revision,
             settings.embedding_device.lower(),
         )
         return IndexingPipeline(

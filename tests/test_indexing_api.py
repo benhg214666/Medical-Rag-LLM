@@ -31,6 +31,7 @@ class MemoryVectorStore(VectorStore):
     def ensure_embedding_compatibility(
         self,
         model_name: str,
+        model_revision: str,
         dimension: int,
         normalized: bool,
     ) -> None:

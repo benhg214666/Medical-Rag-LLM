@@ -94,12 +94,17 @@ class ChromaStore(VectorStore):
     def ensure_embedding_compatibility(
         self,
         model_name: str,
+        model_revision: str,
         dimension: int,
         normalized: bool,
     ) -> None:
         """建立或驗證 collection 的 embedding 相容性合約。"""
         if not model_name.strip():
             raise VectorStoreError("embedding model name 不可為空白")
+        if not model_revision.strip():
+            raise VectorStoreError(
+                "embedding model revision 不可為空白"
+            )
         if dimension <= 0:
             raise VectorStoreError("embedding dimension 必須大於 0")
 
@@ -107,12 +112,19 @@ class ChromaStore(VectorStore):
             "distance_metric": _DISTANCE_METRIC,
             "schema_version": _COLLECTION_SCHEMA_VERSION,
             "embedding_model": model_name,
+            "embedding_model_revision": model_revision,
             "embedding_dimension": dimension,
             "embedding_normalized": normalized,
         }
 
         try:
             current = dict(self._collection.metadata or {})
+            current_distance = current.get("hnsw:space")
+            if current_distance not in {None, _DISTANCE_METRIC}:
+                raise VectorStoreError(
+                    "collection embedding 設定不相容：hnsw:space"
+                )
+
             missing_fields = [
                 key for key in expected if key not in current
             ]

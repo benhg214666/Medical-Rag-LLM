@@ -32,10 +32,18 @@ def test_local_backend_is_lazy() -> None:
     assert backend.model_name == "intfloat/multilingual-e5-small"
 
 
+def test_local_backend_rejects_empty_revision() -> None:
+    with pytest.raises(ValueError, match="revision"):
+        LocalEmbeddingBackend("test/model", revision="  ")
+
+
 def test_factory_creates_local_backend() -> None:
-    backend = create_embedding_backend(Settings(embedding_device="cpu"))
+    settings = Settings(embedding_device="cpu")
+    backend = create_embedding_backend(settings)
+
     assert isinstance(backend, LocalEmbeddingBackend)
     assert backend._model is None
+    assert backend.model_revision == settings.embedding_model_revision
 
 
 def test_factory_rejects_unsupported_provider() -> None:
@@ -75,6 +83,35 @@ def test_encode_uses_e5_prefix_and_normalization(monkeypatch: pytest.MonkeyPatch
     assert backend.embed_query("治療") == [1.0, 0.0]
     assert calls["texts"] == ["query: 治療"]
 
+
+def test_non_e5_model_does_not_add_prefix(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    encoded_texts: list[list[str]] = []
+
+    class MockModel:
+        def encode(
+            self,
+            texts: list[str],
+            **kwargs: object,
+        ) -> list[list[float]]:
+            encoded_texts.append(texts)
+            return [[1.0, 0.0] for _ in texts]
+
+    monkeypatch.setitem(
+        sys.modules,
+        "sentence_transformers",
+        SimpleNamespace(
+            SentenceTransformer=lambda *args, **kwargs: MockModel()
+        ),
+    )
+
+    backend = LocalEmbeddingBackend("sentence-transformers/test-model")
+    backend.embed_documents(["document"])
+    backend.embed_query("question")
+
+    assert encoded_texts == [["document"], ["question"]]
+
 def test_embedding_backend_is_reused_across_requests() -> None:
     _get_cached_embedding_backend.cache_clear()
 
@@ -82,15 +119,24 @@ def test_embedding_backend_is_reused_across_requests() -> None:
         first = _get_cached_embedding_backend(
             "local",
             "intfloat/multilingual-e5-small",
+            "revision-a",
             "cpu",
         )
         second = _get_cached_embedding_backend(
             "local",
             "intfloat/multilingual-e5-small",
+            "revision-a",
+            "cpu",
+        )
+        different_revision = _get_cached_embedding_backend(
+            "local",
+            "intfloat/multilingual-e5-small",
+            "revision-b",
             "cpu",
         )
 
         assert first is second
+        assert first is not different_revision
         assert first._model is None
     finally:
         _get_cached_embedding_backend.cache_clear()
@@ -137,3 +183,68 @@ def test_backends_report_normalization_contract() -> None:
 
     assert local_backend.normalizes_embeddings is True
     assert fake_backend.normalizes_embeddings is False
+
+def test_model_revision_is_passed_to_sentence_transformer(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    constructor_kwargs: dict[str, object] = {}
+
+    class MockModel:
+        def get_sentence_embedding_dimension(self) -> int:
+            return 2
+
+    def create_mock_model(
+        *args: object,
+        **kwargs: object,
+    ) -> MockModel:
+        constructor_kwargs.update(kwargs)
+        return MockModel()
+
+    monkeypatch.setitem(
+        sys.modules,
+        "sentence_transformers",
+        SimpleNamespace(
+            SentenceTransformer=create_mock_model
+        ),
+    )
+
+    backend = LocalEmbeddingBackend(
+        "intfloat/multilingual-e5-small",
+        device="cpu",
+        revision="fixed-test-revision",
+    )
+
+    assert backend.dimension == 2
+    assert backend.model_revision == "fixed-test-revision"
+    assert constructor_kwargs["revision"] == (
+        "fixed-test-revision"
+    )
+    assert constructor_kwargs["device"] == "cpu"
+
+
+def test_dimension_prefers_current_sentence_transformers_api(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[str] = []
+
+    class MockModel:
+        def get_embedding_dimension(self) -> int:
+            calls.append("current")
+            return 384
+
+        def get_sentence_embedding_dimension(self) -> int:
+            calls.append("deprecated")
+            return 384
+
+    monkeypatch.setitem(
+        sys.modules,
+        "sentence_transformers",
+        SimpleNamespace(
+            SentenceTransformer=lambda *args, **kwargs: MockModel()
+        ),
+    )
+
+    backend = LocalEmbeddingBackend("intfloat/multilingual-e5-small")
+
+    assert backend.dimension == 384
+    assert calls == ["current"]

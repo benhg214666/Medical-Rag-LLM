@@ -15,8 +15,12 @@ class FakeEmbeddingBackend(EmbeddingBackend):
 
     @property
     def model_name(self) -> str:
-        return "test/fake-embedding"
-    
+        return "fake-embedding"
+
+    @property
+    def model_revision(self) -> str:
+        return "test-revision"
+
     @property
     def normalizes_embeddings(self) -> bool:
         return False

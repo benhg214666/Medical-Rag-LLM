@@ -8,12 +8,23 @@ from app.embeddings.base import EmbeddingBackend, EmbeddingError
 class LocalEmbeddingBackend(EmbeddingBackend):
     """本地模型後端；直到第一次向量化才載入模型。"""
 
-    def __init__(self, model_name: str, device: str = "cpu") -> None:
+    def __init__(
+        self,
+        model_name: str,
+        device: str = "cpu",
+        revision: str = "main",
+    ) -> None:
         if not model_name.strip():
             raise ValueError("embedding model_name 不可為空白")
+        if not revision.strip():
+            raise ValueError(
+                "embedding model revision 不可為空白"
+            )
         if device not in {"cpu", "auto", "cuda"}:
             raise ValueError("embedding device 僅支援 cpu、auto 或 cuda")
+
         self._model_name = model_name
+        self._model_revision = revision
         self.device = device
         self._model: Any | None = None
         self._model_lock = Lock()
@@ -23,9 +34,28 @@ class LocalEmbeddingBackend(EmbeddingBackend):
         return self._model_name
 
     @property
+    def model_revision(self) -> str:
+        return self._model_revision
+
+    @property
     def dimension(self) -> int:
         model = self._load_model()
-        dimension = model.get_sentence_embedding_dimension()
+        get_dimension = getattr(
+            model,
+            "get_embedding_dimension",
+            None,
+        )
+        if not callable(get_dimension):
+            get_dimension = getattr(
+                model,
+                "get_sentence_embedding_dimension",
+                None,
+            )
+        if not callable(get_dimension):
+            raise EmbeddingError(
+                "embedding 模型未提供向量維度 API"
+            )
+        dimension = get_dimension()
         if not isinstance(dimension, int) or dimension <= 0:
             raise EmbeddingError("embedding 模型回傳無效的向量維度")
         return dimension
@@ -55,6 +85,7 @@ class LocalEmbeddingBackend(EmbeddingBackend):
                 self._model = SentenceTransformer(
                     self._model_name,
                     device=self._resolve_device(),
+                    revision=self._model_revision,
                 )
             except Exception as exc:
                 raise EmbeddingError(

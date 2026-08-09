@@ -35,9 +35,11 @@ POST /api/documents/upload
 → local ChromaDB
 ```
 
-Phase 3 預設 CPU 執行。未來 AMD ROCm 環境會安裝對應 ROCm 版本的 PyTorch。專案
-embedding backend 不假設 NVIDIA GPU；ROCm、GPU、網路與 Hugging Face 都不是 pytest
-的必要條件。
+Phase 3 預設 CPU 執行，embedding 模型固定為
+`intfloat/multilingual-e5-small` revision
+`614241f622f53c4eeff9890bdc4f31cfecc418b3`。一般 pytest 使用 mock/fake，
+不下載模型，也不需要 GPU、ROCm、網路或 Hugging Face 連線。真模型 smoke test
+必須另外明確執行。
 
 目前仍不是完整 RAG：尚未實作 Retriever、語意搜尋、LLM 或答案生成。Phase 4 才會加入
 Retriever，本階段不提供 Top-K search API。
@@ -54,9 +56,9 @@ Phase 1 的所有功能（FastAPI 應用、`GET /`、`GET /health`、三個模�
 
 ## 三、尚未完成內容
 
-以下功能**目前完全沒有實作**，相關模組只有一行 docstring 說明未來用途：
-
-Embedding（文字轉向量）、向量資料庫（ChromaDB / FAISS）、Retriever（向量檢索）、Hybrid Search、Reranker、LLM 與 Ollama 整合、RAG 問答功能、前端介面、Docker 實際部署、評估指標。
+以下功能**目前完全沒有實作**，相關模組只有預留骨架：Retriever（向量檢索）、
+Hybrid Search、Reranker、LLM 與 Ollama 整合、RAG 問答功能、前端介面、
+Docker 實際部署、評估指標。Embedding 與 ChromaDB indexing 已在 Phase 3 完成。
 
 另外**本階段不支援掃描式 PDF 的 OCR**。掃描式 PDF 的內容是影像而非文字圖層，系統無法抽取文字，會明確回報錯誤訊息告知這可能是掃描式 PDF 且本階段不支援 OCR，而不是靜默回傳空結果。
 
@@ -143,11 +145,13 @@ Medical-Rag-LLM/
 ├── configs/default.yaml  參數設計參考（尚未接入程式）
 ├── tests/                pytest 測試
 ├── requirements.txt
+├── requirements-dev.txt
+├── scripts/smoke_embedding.py
 ├── .env.example
 └── README.md
 ```
 
-## 六、Linux 安裝與執行步驟
+## 六、安裝與執行步驟
 
 以下指令**全部都必須在專案根目錄執行**，也就是能看到 `requirements.txt` 的那一層。假設透過 SSH 或遠端連線操作主機，全程使用終端機，不需要任何桌面 GUI。
 
@@ -159,25 +163,57 @@ cd Medical-Rag-LLM
 
 ### 2. 建立並啟用虛擬環境
 
-虛擬環境會把這個專案的套件裝在專案自己的資料夾裡，不污染系統 Python。
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-```
-
-啟用成功後，提示字元最前面通常會出現 `(.venv)`。**看到 `(.venv)` 才代表虛擬環境已啟用**。
+本專案以 Python 3.12 驗證。請依下一節的平台指令建立 `.venv`；虛擬環境會把
+套件隔離在專案內，不污染系統 Python。啟用成功後，提示字元通常會出現
+`(.venv)`。
 
 ### 3. 安裝依賴
 
-```bash
-python -m pip install --upgrade pip
-pip install -r requirements.txt
+`requirements.txt` 固定 production 的直接依賴版本；`requirements-dev.txt` 再加入
+pytest 與 Starlette 目前使用的 `httpx2` 測試工具。PyTorch 是平台專屬套件，刻意不放在
+通用 requirements。
+
+#### Windows CPU（PowerShell）
+
+```powershell
+py -3.12 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install torch==2.13.0 --index-url https://download.pytorch.org/whl/cpu
+python -m pip install -r requirements-dev.txt
 ```
+
+#### Linux CPU
+
+```bash
+python3.12 -m venv .venv
+source .venv/bin/activate
+python -m pip install torch==2.13.0 --index-url https://download.pytorch.org/whl/cpu
+python -m pip install -r requirements-dev.txt
+```
+
+#### Linux AMD ROCm
+
+先依 [AMD ROCm PyTorch 安裝文件](https://rocm.docs.amd.com/en/latest/rocm-for-ai/pytorch.html)
+確認 GPU、Linux 發行版、Python、ROCm 與 PyTorch 的相容矩陣，再安裝該組合指定的
+ROCm wheel 或 AMD 驗證過的 container。**不要先執行上面的 CPU wheel 指令，也不要用
+一般 PyPI 的 `pip install torch` 代替 ROCm wheel。**
+
+安裝 ROCm PyTorch 後，先確認它不是 CPU build：
+
+```bash
+python -c "import torch; assert torch.version.hip; print(torch.__version__, torch.version.hip, torch.cuda.is_available())"
+python -m pip install -r requirements-dev.txt
+python -c "import torch; assert torch.version.hip; print(torch.__version__, torch.version.hip, torch.cuda.is_available())"
+```
+
+第二次檢查可防止後續 dependency resolution 意外替換 ROCm build。PyTorch 官方也要求
+Linux AMD 環境在安裝器選擇 ROCm compute platform；ROCm build 在 Python API 中仍以
+`torch.cuda` 檢查裝置。
 
 **不要使用 `sudo pip install`。** 在虛擬環境內安裝不需要管理員權限，用 sudo 反而會把套件裝到系統目錄、造成權限混亂。
 
-Phase 2 使用 `pypdf`、`python-docx` 與 `python-multipart`；Phase 3 新增 `sentence-transformers` 與 `chromadb`。requirements 不指定任何 NVIDIA CUDA wheel，也不要求 ROCm 或 GPU。
+Phase 2 使用 `pypdf`、`python-docx` 與 `python-multipart`；Phase 3 新增
+`sentence-transformers` 與 `chromadb`。
 
 ### 4. 建立 .env
 
@@ -288,7 +324,8 @@ curl.exe -X POST "http://127.0.0.1:8000/api/documents/upload" -F "file=@data/raw
 
 ### 處理結果的位置
 
-處理後的 JSON 寫入 `data/processed/`，檔名格式為 `<安全化檔名>_<document_id 前 8 碼>.json`。原始上傳檔保存在 `data/raw/`。
+處理後的 JSON 寫入 `data/processed/`，檔名格式為 `<document_id>.json`；原始上傳檔
+則以 `<安全化檔名>_<document_id 前 8 碼>.<副檔名>` 保存在 `data/raw/`。
 
 這兩個目錄都已列入 `.gitignore`，不會進入版本控制。
 
@@ -296,11 +333,28 @@ curl.exe -X POST "http://127.0.0.1:8000/api/documents/upload" -F "file=@data/raw
 
 測試不需要啟動伺服器，全部離線執行，不依賴外部模型、網路或預先準備的測試檔（DOCX 與 PDF 都在測試中動態建立）。
 
+Linux：
+
 ```bash
-pytest
+python -m pytest
+```
+
+Windows 的 Chroma 檔案可能在 pytest 清理時仍被占用，因此將 basetemp 放在專案外：
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest -vv --basetemp ..\pytest-medical-rag
 ```
 
 預期看到全部測試 passed。所有測試輸出都導向 pytest 的暫存目錄，**不會污染專案的 `data/` 目錄**。
+
+真模型 CPU smoke test 會在首次執行時下載模型，不屬於一般單元測試。取得下載許可後才執行：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\smoke_embedding.py
+```
+
+它會驗證固定 revision、384 維、所有值 finite、L2 normalized，以及 E5 的
+`passage:`／`query:` prefix。
 
 ## 九、常見錯誤排除
 

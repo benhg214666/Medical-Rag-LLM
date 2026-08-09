@@ -17,6 +17,7 @@ class ModelsStatusResponse(BaseModel):
     status: str
     embedding_provider: str
     embedding_model: str
+    embedding_model_revision: str
     embedding_device: str
 
 
@@ -30,5 +31,8 @@ def get_models_status(
         status="available",
         embedding_provider=settings.embedding_provider,
         embedding_model=settings.embedding_model_name,
+        embedding_model_revision=(
+            settings.embedding_model_revision
+        ),
         embedding_device=settings.embedding_device,
     )

@@ -27,7 +27,12 @@ class EmbeddingBackend(ABC):
     @abstractmethod
     def model_name(self) -> str:
         """模型識別名稱。"""
-    
+
+    @property
+    @abstractmethod
+    def model_revision(self) -> str:
+        """模型的固定 revision 或版本識別。"""
+
     @property
     @abstractmethod
     def normalizes_embeddings(self) -> bool:

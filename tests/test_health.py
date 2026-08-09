@@ -59,5 +59,8 @@ def test_models_status_reports_embedding_configuration() -> None:
         "status": "available",
         "embedding_provider": "local",
         "embedding_model": "intfloat/multilingual-e5-small",
+        "embedding_model_revision": (
+            "614241f622f53c4eeff9890bdc4f31cfecc418b3"
+        ),
         "embedding_device": "cpu",
     }

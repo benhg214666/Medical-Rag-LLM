@@ -36,6 +36,7 @@ chunking:
 embedding:
   provider: local
   model_name: intfloat/multilingual-e5-small
+  model_revision: 614241f622f53c4eeff9890bdc4f31cfecc418b3
   device: cpu
   batch_size: 32
 

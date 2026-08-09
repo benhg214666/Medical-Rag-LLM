@@ -57,6 +57,7 @@ def test_embedding_contract_persists_after_reopen(
     store = ChromaStore(db_dir, "contract_test")
     store.ensure_embedding_compatibility(
         model_name="intfloat/multilingual-e5-small",
+        model_revision="revision-a",
         dimension=384,
         normalized=True,
     )
@@ -64,6 +65,7 @@ def test_embedding_contract_persists_after_reopen(
     reopened = ChromaStore(db_dir, "contract_test")
     reopened.ensure_embedding_compatibility(
         model_name="intfloat/multilingual-e5-small",
+        model_revision="revision-a",
         dimension=384,
         normalized=True,
     )
@@ -72,23 +74,62 @@ def test_embedding_contract_persists_after_reopen(
     assert metadata["embedding_model"] == (
         "intfloat/multilingual-e5-small"
     )
+    assert metadata["embedding_model_revision"] == "revision-a"
     assert metadata["embedding_dimension"] == 384
     assert metadata["embedding_normalized"] is True
     assert metadata["distance_metric"] == "cosine"
     assert metadata["schema_version"] == 1
 
 
+def test_embedding_contract_rejects_empty_revision(
+    tmp_path: Path,
+) -> None:
+    store = ChromaStore(tmp_path / "empty-revision-db", "contract_test")
+
+    with pytest.raises(VectorStoreError, match="revision"):
+        store.ensure_embedding_compatibility(
+            model_name="test/model",
+            model_revision="  ",
+            dimension=4,
+            normalized=False,
+        )
+
+
+def test_empty_collection_with_incompatible_distance_is_rejected(
+    tmp_path: Path,
+) -> None:
+    import chromadb
+
+    db_dir = tmp_path / "distance-mismatch-db"
+    client = chromadb.PersistentClient(path=str(db_dir))
+    client.get_or_create_collection(
+        "contract_test",
+        metadata={"hnsw:space": "l2"},
+    )
+    store = ChromaStore(db_dir, "contract_test")
+
+    with pytest.raises(VectorStoreError, match="hnsw:space"):
+        store.ensure_embedding_compatibility(
+            model_name="test/model",
+            model_revision="revision-a",
+            dimension=4,
+            normalized=False,
+        )
+
+
 @pytest.mark.parametrize(
-    ("model_name", "dimension", "normalized"),
+    ("model_name", "model_revision", "dimension", "normalized"),
     [
-        ("another/model", 384, True),
-        ("intfloat/multilingual-e5-small", 768, True),
-        ("intfloat/multilingual-e5-small", 384, False),
+        ("another/model", "revision-a", 384, True),
+        ("intfloat/multilingual-e5-small", "revision-b", 384, True),
+        ("intfloat/multilingual-e5-small", "revision-a", 768, True),
+        ("intfloat/multilingual-e5-small", "revision-a", 384, False),
     ],
 )
 def test_incompatible_embedding_contract_is_rejected(
     tmp_path: Path,
     model_name: str,
+    model_revision: str,
     dimension: int,
     normalized: bool,
 ) -> None:
@@ -97,6 +138,7 @@ def test_incompatible_embedding_contract_is_rejected(
     store = ChromaStore(db_dir, "contract_test")
     store.ensure_embedding_compatibility(
         model_name="intfloat/multilingual-e5-small",
+        model_revision="revision-a",
         dimension=384,
         normalized=True,
     )
@@ -106,6 +148,7 @@ def test_incompatible_embedding_contract_is_rejected(
     with pytest.raises(VectorStoreError, match="不相容"):
         reopened.ensure_embedding_compatibility(
             model_name=model_name,
+            model_revision=model_revision,
             dimension=dimension,
             normalized=normalized,
         )
@@ -127,6 +170,7 @@ def test_nonempty_legacy_collection_without_contract_is_rejected(
     with pytest.raises(VectorStoreError, match="缺少"):
         store.ensure_embedding_compatibility(
             model_name="intfloat/multilingual-e5-small",
+            model_revision="revision-a",
             dimension=4,
             normalized=True,
         )
@@ -140,6 +184,7 @@ def test_delete_stale_chunks_keeps_only_current_document_chunks(
     )
     store.ensure_embedding_compatibility(
         model_name="test/model",
+        model_revision="revision-a",
         dimension=4,
         normalized=False,
     )
@@ -192,6 +237,7 @@ def test_get_document_ids_and_delete_by_ids(
     )
     store.ensure_embedding_compatibility(
         model_name="test/model",
+        model_revision="revision-a",
         dimension=4,
         normalized=False,
     )
@@ -260,6 +306,7 @@ def test_reserved_metadata_cannot_override_system_fields(
     )
     store.ensure_embedding_compatibility(
         model_name="test/model",
+        model_revision="revision-a",
         dimension=4,
         normalized=False,
     )

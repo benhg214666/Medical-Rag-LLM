@@ -11,6 +11,7 @@ def create_embedding_backend(settings: Settings) -> EmbeddingBackend:
         return LocalEmbeddingBackend(
             model_name=settings.embedding_model_name,
             device=settings.embedding_device,
+            revision=settings.embedding_model_revision,
         )
     raise EmbeddingError(
         f"不支援的 embedding provider: {settings.embedding_provider}"
