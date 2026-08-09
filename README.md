@@ -6,15 +6,49 @@
 
 之所以強調「本地」，是因為醫療資料具有高度敏感性，不適合送到外部雲端服務。整套流程留在本機，資料就不會離開機器。
 
-**本專案採分階段（Phase）開發，目前處於 Phase 2 完成狀態。**
+**本專案採分階段（Phase）開發，目前已完成 Phase 3。**
 
-主要執行與部署環境為 Linux（公司 Lab 遠端主機），後續 Embedding 與 LLM 階段會使用 AMD GPU 與 ROCm。但**Phase 2 完全不需要 GPU**，純 CPU 環境即可執行全部功能與測試。
+## Phase 3：Embedding + Vector Store
+
+目前資料流程為：
+
+```text
+Document → Chunk → Embedding → Vector → ChromaDB
+```
+
+Embedding 將文字片段轉成可比較語意的數值向量；Vector Store 則把向量連同原文、
+來源 metadata 與確定性的 `chunk_id` 保存。Phase 3 使用本地
+`chromadb.PersistentClient`，預設資料目錄是 `vector_db/`，collection 是
+`medical_documents`。重複 index 相同文件時採 upsert，不會持續增加重複 records。
+
+預設模型是 `intfloat/multilingual-e5-small`。文件與查詢所需的 `passage:` / `query:`
+前綴由 backend 自動處理，向量也會正規化。模型採 lazy loading：啟動 API、查看 models
+status 或執行正常 pytest 都不下載模型；第一次真正 index 時才可能從 Hugging Face 下載，
+之後使用本機 cache。模型檔與 `vector_db/` runtime data 都不可 commit。
+
+上傳與 index 是兩個獨立步驟：
+
+```text
+POST /api/documents/upload
+→ data/processed/<document_id>.json
+→ POST /api/documents/<document_id>/index
+→ local ChromaDB
+```
+
+Phase 3 預設 CPU 執行。未來 AMD ROCm 環境會安裝對應 ROCm 版本的 PyTorch。專案
+embedding backend 不假設 NVIDIA GPU；ROCm、GPU、網路與 Hugging Face 都不是 pytest
+的必要條件。
+
+目前仍不是完整 RAG：尚未實作 Retriever、語意搜尋、LLM 或答案生成。Phase 4 才會加入
+Retriever，本階段不提供 Top-K search API。
+
+主要執行與部署環境為 Linux（公司 Lab 遠端主機），未來可使用 AMD GPU 與 ROCm。但 Phase 3 預設 CPU，純 CPU 環境即可啟動 API 與執行全部測試。
 
 ## 二、Phase 2 完成內容
 
 Phase 2 完成了整條**文件前處理管線**：把原始醫療文件轉換成帶有完整來源資訊的文字片段，並存成結構化 JSON。
 
-已完成的項目包括：支援 TXT、PDF、DOCX 三種格式的文字抽取；文字清理與格式正規化；依字元數切塊並保留重疊；完整的 metadata（來源、頁碼、段落、chunk index、字元位置）；確定性的 chunk_id 與 document_id；UTF-8 JSON 輸出至 `data/processed/`；`POST /api/documents/upload` 上傳端點；以及 170 項離線 pytest 測試。
+已完成的項目包括：支援 TXT、PDF、DOCX 三種格式的文字抽取；文字清理與格式正規化；依字元數切塊並保留重疊；完整的 metadata（來源、頁碼、段落、chunk index、字元位置）；確定性的 chunk_id 與 document_id；UTF-8 JSON 輸出至 `data/processed/`；以及 `POST /api/documents/upload` 上傳端點。
 
 Phase 1 的所有功能（FastAPI 應用、`GET /`、`GET /health`、三個模組 status endpoint、設定系統、集中式 logging）完全保留且未受影響。
 
@@ -143,7 +177,7 @@ pip install -r requirements.txt
 
 **不要使用 `sudo pip install`。** 在虛擬環境內安裝不需要管理員權限，用 sudo 反而會把套件裝到系統目錄、造成權限混亂。
 
-Phase 2 新增的依賴為：`pypdf`（PDF 解析）、`python-docx`（Word 解析）、`python-multipart`（處理 multipart/form-data 上傳）。本階段刻意不含任何 GPU、ROCm、PyTorch 套件。
+Phase 2 使用 `pypdf`、`python-docx` 與 `python-multipart`；Phase 3 新增 `sentence-transformers` 與 `chromadb`。requirements 不指定任何 NVIDIA CUDA wheel，也不要求 ROCm 或 GPU。
 
 ### 4. 建立 .env
 
@@ -209,8 +243,9 @@ curl.exe -X POST "http://127.0.0.1:8000/api/documents/upload" -F "file=@data/raw
 | `GET /health` | 健康檢查 |
 | `GET /api/documents/status` | documents 模組狀態 |
 | `POST /api/documents/upload` | **上傳並處理文件** |
+| `POST /api/documents/{document_id}/index` | **將 processed JSON 建立本地向量索引** |
 | `GET /api/query/status` | query 模組狀態（尚未實作） |
-| `GET /api/models/status` | models 模組狀態（尚未實作） |
+| `GET /api/models/status` | embedding provider/model/device 設定（不載入模型） |
 
 ### 回應範例
 
@@ -318,4 +353,4 @@ Git 內統一使用 LF 換行（已由 `.gitattributes` 強制）。若 shell sc
 
 Phase 2 完成的是「文件前處理」，也就是把文件變成結構良好、帶有完整來源資訊的文字片段。
 
-**系統目前還無法回答任何問題。** Embedding、向量檢索與 LLM 生成都尚未實作，這些會在後續 Phase 逐步完成。現階段可以驗證的是：文件能否正確被讀取、清理是否保留了醫療內容的完整性、切塊邊界是否合理、metadata 是否足以定位原文。這些是後續檢索品質的地基。
+**系統目前還無法回答任何問題。** Phase 3 已能產生 Embedding 並保存至 ChromaDB，但向量檢索、Retriever 與 LLM 生成尚未實作。Phase 4 才會加入 Retriever；現階段可以驗證文件前處理、向量化與持久化 indexing。

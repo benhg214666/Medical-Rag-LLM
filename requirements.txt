@@ -1,6 +1,5 @@
-# Phase 1 + Phase 2 依賴。
-# 後續 RAG 相關套件（embedding、vector store、LLM）會在對應 Phase 才加入。
-# 本階段刻意不含任何 GPU / ROCm / PyTorch 套件，確保純 CPU 環境即可完整執行與測試。
+# Phase 1 + Phase 2 + Phase 3 依賴。
+# 不指定 CUDA/ROCm wheel；Lab 的 ROCm PyTorch 由部署環境依 AMD 官方方式安裝。
 
 # --- Web 框架（Phase 1）---
 fastapi>=0.110
@@ -14,6 +13,10 @@ PyYAML>=6.0
 pypdf>=4.2
 python-docx>=1.1
 python-multipart>=0.0.9
+
+# --- Embedding 與 Vector Store（Phase 3；預設 CPU）---
+sentence-transformers>=3.0
+chromadb>=0.5
 
 # --- 測試 ---
 pytest>=8.0
