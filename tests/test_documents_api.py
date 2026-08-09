@@ -67,7 +67,6 @@ class TestPhase1Compatibility:
         ("module_name", "expected_status"),
         [
             ("query", "not_implemented"),
-            ("models", "not_implemented"),
             ("documents", "available"),
         ],
     )

@@ -13,6 +13,7 @@
 
 import hashlib
 import logging
+import re
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
@@ -28,16 +29,25 @@ from app.ingestion.exceptions import (
 from app.ingestion.loaders import SUPPORTED_EXTENSIONS
 from app.ingestion.models import DocumentChunk
 from app.ingestion.pipeline import ingest_document, sanitize_filename
+from app.indexing.dependencies import get_indexing_pipeline
+from app.indexing.pipeline import (
+    IndexingError,
+    IndexingPipeline,
+    ProcessedDocumentError,
+)
 from app.schemas.response import (
     ChunkPreview,
     DocumentUploadResponse,
     IngestionStatistics,
+    IndexDocumentResponse,
     ModuleStatusResponse,
 )
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/documents", tags=["documents"])
+
+_DOCUMENT_ID_PATTERN = re.compile(r"^[0-9a-f]{16}$")
 
 # 回應中最多附上幾個 chunk 預覽，以及每個預覽的字元上限。
 # 刻意保守：預覽只為了讓上傳者確認切塊合理，不是資料傳遞管道。
@@ -214,3 +224,44 @@ async def upload_document(
         output_file=result.output_file or "",
         chunk_previews=_build_previews(result.chunks),
     )
+
+
+@router.post(
+    "/{document_id}/index",
+    response_model=IndexDocumentResponse,
+    summary="將 Phase 2 processed document 建立向量索引",
+)
+def index_document(
+    document_id: str,
+    settings: Settings = Depends(get_settings),
+    pipeline: IndexingPipeline = Depends(get_indexing_pipeline),
+) -> IndexDocumentResponse:
+    """以精確 document_id 尋找 JSON，embedding 後 upsert 至 Chroma。"""
+    if not _DOCUMENT_ID_PATTERN.fullmatch(document_id):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="找不到指定的 processed document。",
+        )
+    processed_path = settings.processed_data_dir / f"{document_id}.json"
+    if not processed_path.is_file():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="找不到指定的 processed document。",
+        )
+    try:
+        result = pipeline.index_processed_document(
+            processed_path,
+            expected_document_id=document_id,
+        )
+    except ProcessedDocumentError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+    except IndexingError as exc:
+        logger.exception("建立向量索引失敗：document_id=%s", document_id)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="伺服器建立向量索引時發生錯誤，請稍後再試。",
+        ) from exc
+    return IndexDocumentResponse(**result.model_dump())

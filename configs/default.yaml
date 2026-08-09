@@ -31,19 +31,25 @@ chunking:
   chunk_overlap: 100
   min_chunk_size: 50
 
+# --- Phase 3（實際值由 .env / pydantic-settings 決定）---
+
+embedding:
+  provider: local
+  model_name: intfloat/multilingual-e5-small
+  model_revision: 614241f622f53c4eeff9890bdc4f31cfecc418b3
+  device: cpu
+  batch_size: 32
+
+vector_store:
+  provider: chroma
+  db_dir: vector_db
+  collection_name: medical_documents
+
 # --- 以下為未來 Phase 的設計草稿，尚未實作 ---
 
 retrieval:
   top_k: 5
 
-embedding:
-  provider: local
-  model_name: null
-
 llm:
   backend: local
   model_name: null
-
-vector_store:
-  provider: chroma
-  persist_directory: vector_db

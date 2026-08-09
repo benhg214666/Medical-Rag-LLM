@@ -1,20 +1,13 @@
-# Phase 1 + Phase 2 依賴。
-# 後續 RAG 相關套件（embedding、vector store、LLM）會在對應 Phase 才加入。
-# 本階段刻意不含任何 GPU / ROCm / PyTorch 套件，確保純 CPU 環境即可完整執行與測試。
-
-# --- Web 框架（Phase 1）---
-fastapi>=0.110
-uvicorn[standard]>=0.27
-pydantic>=2.6
-pydantic-settings>=2.2
-python-dotenv>=1.0
-PyYAML>=6.0
-
-# --- 文件解析（Phase 2）---
-pypdf>=4.2
-python-docx>=1.1
-python-multipart>=0.0.9
-
-# --- 測試 ---
-pytest>=8.0
-httpx>=0.27
+# Runtime dependencies pinned to the versions used for Phase 3 hardening.
+# Install the platform-specific PyTorch build first; see README.md.
+fastapi==0.141.1
+uvicorn[standard]==0.52.1
+pydantic==2.13.4
+pydantic-settings==2.15.0
+python-dotenv==1.2.2
+PyYAML==6.0.3
+pypdf==6.15.0
+python-docx==1.2.0
+python-multipart==0.0.32
+sentence-transformers==5.7.0
+chromadb==1.5.9

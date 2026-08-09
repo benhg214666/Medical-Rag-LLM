@@ -35,7 +35,6 @@ def test_health_status_is_healthy() -> None:
     ("module_name", "expected_status"),
     [
         ("query", "not_implemented"),
-        ("models", "not_implemented"),
         ("documents", "available"),
     ],
 )
@@ -49,4 +48,19 @@ def test_module_status_endpoints(
     assert response.json() == {
         "module": module_name,
         "status": expected_status,
+    }
+
+
+def test_models_status_reports_embedding_configuration() -> None:
+    response = client.get("/api/models/status")
+    assert response.status_code == 200
+    assert response.json() == {
+        "module": "models",
+        "status": "available",
+        "embedding_provider": "local",
+        "embedding_model": "intfloat/multilingual-e5-small",
+        "embedding_model_revision": (
+            "614241f622f53c4eeff9890bdc4f31cfecc418b3"
+        ),
+        "embedding_device": "cpu",
     }

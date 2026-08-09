@@ -76,6 +76,9 @@ def load_txt(file_path: Path) -> list[LoadedDocument]:
             "請確認檔案編碼（本階段僅支援 UTF-8 / UTF-8-SIG）"
         )
 
+    # 在格式邊界統一為 LF，確保 Windows 產生的 TXT 與 Linux 行為一致。
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
+
     if not text.strip():
         raise EmptyDocumentError(f"檔案 '{file_path.name}' 沒有任何文字內容")
 

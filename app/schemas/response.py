@@ -75,3 +75,14 @@ class ErrorResponse(BaseModel):
     """
 
     detail: str
+
+
+class IndexDocumentResponse(BaseModel):
+    """POST /api/documents/{document_id}/index 的安全摘要。"""
+
+    status: str
+    document_id: str
+    collection_name: str
+    indexed_chunks: int
+    embedding_model: str
+    embedding_dimension: int
