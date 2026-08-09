@@ -1,7 +1,7 @@
 """以 Sentence Transformers 執行的 lazy-loading 本地 embedding。"""
 
 from typing import Any
-
+from threading import Lock
 from app.embeddings.base import EmbeddingBackend, EmbeddingError
 
 
@@ -16,6 +16,7 @@ class LocalEmbeddingBackend(EmbeddingBackend):
         self._model_name = model_name
         self.device = device
         self._model: Any | None = None
+        self._model_lock = Lock()
 
     @property
     def model_name(self) -> str:
@@ -42,18 +43,25 @@ class LocalEmbeddingBackend(EmbeddingBackend):
     def _load_model(self) -> Any:
         if self._model is not None:
             return self._model
-        try:
-            from sentence_transformers import SentenceTransformer
 
-            self._model = SentenceTransformer(
-                self._model_name,
-                device=self._resolve_device(),
-            )
-        except Exception as exc:
-            raise EmbeddingError(
-                f"無法載入本地 embedding 模型 '{self._model_name}'"
-            ) from exc
-        return self._model
+        with self._model_lock:
+            # 取得 lock 後必須再次檢查，因為其他 thread 可能已完成載入。
+            if self._model is not None:
+                return self._model
+
+            try:
+                from sentence_transformers import SentenceTransformer
+
+                self._model = SentenceTransformer(
+                    self._model_name,
+                    device=self._resolve_device(),
+                )
+            except Exception as exc:
+                raise EmbeddingError(
+                    f"無法載入本地 embedding 模型 '{self._model_name}'"
+                ) from exc
+
+            return self._model
 
     def _uses_e5_prefix(self) -> bool:
         return "e5" in self._model_name.lower()
