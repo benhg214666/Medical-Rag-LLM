@@ -59,6 +59,15 @@ class Settings(BaseSettings):
     vector_db_dir: Path = Path("vector_db")
     chroma_collection_name: str = "medical_documents"
 
+    # --- Phase 4：檢索（retrieval）---
+    # retrieval_top_k 是未指定 top_k 時的預設回傳筆數。
+    # 5 是 RAG 常見起點：足以涵蓋一個問題的多個佐證段落，
+    # 又不會在 Phase 5 把過長的 context 塞進 LLM。
+    retrieval_top_k: int = 5
+    # 上限的用意是防止呼叫端要求極大的 top_k，
+    # 造成不必要的記憶體與序列化負擔（等同一種 DoS 防護）。
+    retrieval_max_top_k: int = 50
+
     @property
     def max_upload_size_bytes(self) -> int:
         """上傳大小上限，換算成 bytes 以便與檔案長度直接比較。"""

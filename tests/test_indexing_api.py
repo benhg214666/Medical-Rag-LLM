@@ -13,7 +13,7 @@ from app.indexing.pipeline import IndexingPipeline
 from app.ingestion.models import DocumentChunk
 from app.main import app
 from app.vector_store.base import VectorStore
-from tests.fakes import FakeEmbeddingBackend
+from tests.fakes import FakeEmbeddingBackend, search_records_by_vector
 from tests.test_indexing_pipeline import payload
 
 
@@ -92,6 +92,21 @@ class MemoryVectorStore(VectorStore):
 
     def collection_exists(self) -> bool:
         return True
+
+    # --- Phase 4 追加：VectorStore 新增了搜尋介面 ---
+    # 這個 fake 只服務 indexing API 測試，不會被呼叫到搜尋，
+    # 但 ABC 有 abstract member 就必須實作，否則無法實例化。
+
+    @property
+    def distance_metric(self) -> str:
+        return "cosine"
+
+    def search_by_vector(self, embedding, top_k):
+        return search_records_by_vector(
+            records=self.records,
+            embedding=embedding,
+            top_k=top_k,
+        )
 
 
 @pytest.fixture

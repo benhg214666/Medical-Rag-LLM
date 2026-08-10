@@ -45,10 +45,15 @@ vector_store:
   db_dir: vector_db
   collection_name: medical_documents
 
-# --- 以下為未來 Phase 的設計草稿，尚未實作 ---
+# --- Phase 4（實際值由 .env / pydantic-settings 決定）---
 
 retrieval:
+  # 未指定 top_k 時的預設回傳筆數。
   top_k: 5
+  # 允許的 top_k 上限；超過會回 HTTP 400 而不是靜默截斷。
+  max_top_k: 50
+
+# --- 以下為未來 Phase 的設計草稿，尚未實作 ---
 
 llm:
   backend: local

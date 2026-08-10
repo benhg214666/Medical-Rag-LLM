@@ -36,6 +36,8 @@ def test_health_status_is_healthy() -> None:
     [
         ("query", "not_implemented"),
         ("documents", "available"),
+        # Phase 4 起 retrieval 模組已實作。
+        ("retrieval", "available"),
     ],
 )
 def test_module_status_endpoints(

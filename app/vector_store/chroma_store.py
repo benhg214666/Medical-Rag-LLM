@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from app.ingestion.models import DocumentChunk
-from app.vector_store.base import VectorStore, VectorStoreError
+from app.vector_store.base import VectorMatch, VectorStore, VectorStoreError
 _COLLECTION_SCHEMA_VERSION = 1
 _DISTANCE_METRIC = "cosine"
 _RESERVED_CHUNK_METADATA_KEYS = frozenset(
@@ -75,6 +75,15 @@ class ChromaStore(VectorStore):
     @property
     def collection_name(self) -> str:
         return self._collection_name
+
+    @property
+    def distance_metric(self) -> str:
+        """本 store 建立 collection 時固定使用的距離度量。
+
+        以模組常數為準而非讀取 collection metadata：hnsw:space 是
+        Chroma 的 immutable 建立參數，這裡的宣告即為事實來源。
+        """
+        return _DISTANCE_METRIC
 
     def collection_exists(self) -> bool:
         try:
@@ -214,6 +223,125 @@ class ChromaStore(VectorStore):
             raise VectorStoreError(
                 "寫入 Chroma records 失敗"
             ) from exc
+
+    def search_by_vector(
+        self,
+        embedding: list[float],
+        top_k: int,
+    ) -> list[VectorMatch]:
+        """以查詢向量做 cosine 相似度搜尋，回傳中性的 VectorMatch。
+
+        Chroma 的 query() 回傳的是「平行 list 的 list」結構，例如
+        {"ids": [[...]], "documents": [[...]], "distances": [[...]]}，
+        外層 list 對應每一個查詢向量。本方法一次只送一個向量，
+        因此固定取索引 0，並在此把 Chroma 專屬格式翻譯成 VectorMatch，
+        不讓上層看到任何 Chroma 內部結構。
+        """
+        if top_k <= 0:
+            raise VectorStoreError("top_k 必須大於 0")
+        if not embedding:
+            raise VectorStoreError("查詢向量不可為空")
+
+        # Chroma 在 n_results 超過 record 數時會自行截斷，
+        # 但先讀 count 可在 collection 為空時直接短路，省下一次查詢。
+        record_count = self.count()
+        if record_count == 0:
+            return []
+
+        try:
+            response = self._collection.query(
+                query_embeddings=[embedding],
+                n_results=min(top_k, record_count),
+                include=["documents", "metadatas", "distances"],
+            )
+        except Exception as exc:
+            raise VectorStoreError("Chroma 相似度查詢失敗") from exc
+
+        def first_row(key: str) -> list[Any]:
+            """取出對應第一個查詢向量的那一列。
+
+            Chroma 對每個 include 的欄位都回傳「list of list」，
+            外層對應查詢向量。本方法只送一個向量，故取索引 0。
+            """
+            rows = response.get(key)
+            if rows is None:
+                raise VectorStoreError(
+                    f"Chroma 查詢回應缺少必要欄位：{key}"
+                )
+            if not rows or rows[0] is None:
+                return []
+            return list(rows[0])
+
+        ids = first_row("ids")
+        documents = first_row("documents")
+        metadatas = first_row("metadatas")
+        distances = first_row("distances")
+
+        if not ids:
+            return []
+
+        # 這四個是平行陣列，長度必須一致。長度不符代表回應結構異常，
+        # 此時若繼續以位置對應，會把 A chunk 的文字配上 B chunk 的距離——
+        # 產生看似正常、實際錯誤的檢索結果。醫療情境下寧可明確失敗。
+        expected = len(ids)
+        for name, column in (
+            ("documents", documents),
+            ("metadatas", metadatas),
+            ("distances", distances),
+        ):
+            if len(column) != expected:
+                raise VectorStoreError(
+                    "Chroma 查詢回應結構不完整："
+                    f"{name} 長度與 ids 不一致"
+                )
+
+        matches: list[VectorMatch] = []
+        for position, chunk_id in enumerate(ids):
+            if chunk_id is None:
+                raise VectorStoreError("Chroma 回傳的 record ID 為空")
+
+            raw_distance = distances[position]
+            if raw_distance is None or isinstance(raw_distance, bool):
+                raise VectorStoreError("Chroma 回傳無效的 distance 值")
+            try:
+                distance = float(raw_distance)
+            except (TypeError, ValueError) as exc:
+                raise VectorStoreError(
+                    "Chroma 回傳無法解析的 distance 值"
+                ) from exc
+            if not math.isfinite(distance):
+                raise VectorStoreError("Chroma 回傳無效的 distance 值")
+
+            # chunk 內容是 answer traceability 的基礎。若有 chunk_id
+            # 卻沒有對應文字，回傳空字串會讓上層以為「這段就是空的」，
+            # 進而把空內容當成佐證。這種情況必須明確失敗。
+            text = documents[position]
+            if not isinstance(text, str):
+                raise VectorStoreError(
+                    "Chroma 回傳的 record 缺少文字內容"
+                )
+
+            metadata = metadatas[position]
+            if metadata is not None and not isinstance(metadata, dict):
+                raise VectorStoreError(
+                    "Chroma 回傳的 metadata 結構異常"
+                )
+
+            matches.append(
+                VectorMatch(
+                    chunk_id=str(chunk_id),
+                    text=text,
+                    distance=distance,
+                    # metadata 為 None 是合法的（寫入時可能沒有額外欄位），
+                    # 與「結構異常」不同，故轉成空 dict 而非報錯。
+                    metadata=dict(metadata or {}),
+                )
+            )
+
+        # Chroma 已依距離排序，這裡再排一次是為了讓「最相似在前」
+        # 成為本抽象層的明確保證，而不是依賴底層實作的附帶行為。
+        matches.sort(key=lambda match: match.distance)
+        return matches
 
     def delete_stale_chunks(
         self,

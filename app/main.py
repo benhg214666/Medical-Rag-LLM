@@ -10,7 +10,7 @@ from typing import AsyncIterator
 
 from fastapi import FastAPI
 
-from app.api import documents, models, query
+from app.api import documents, models, query, retrieval
 from app.core.config import settings
 from app.core.logging import setup_logging
 from app.schemas.response import HealthResponse, RootResponse
@@ -36,6 +36,7 @@ app = FastAPI(
 app.include_router(query.router)
 app.include_router(documents.router)
 app.include_router(models.router)
+app.include_router(retrieval.router)
 
 
 @app.get("/", response_model=RootResponse, tags=["system"])

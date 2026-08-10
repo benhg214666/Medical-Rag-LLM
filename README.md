@@ -6,7 +6,76 @@
 
 之所以強調「本地」，是因為醫療資料具有高度敏感性，不適合送到外部雲端服務。整套流程留在本機，資料就不會離開機器。
 
-**本專案採分階段（Phase）開發，目前已完成 Phase 3。**
+**本專案採分階段（Phase）開發，目前已完成 Phase 4。**
+
+## Phase 4：Retriever（檢索層）
+
+目前完整管線為：
+
+```text
+Document → Loader → Cleaning → Chunking → Embedding → Vector Store → Retriever
+```
+
+查詢時的資料流為：
+
+```text
+query → embed_query → search_by_vector → VectorMatch → RetrievalResult
+```
+
+分層上，API 與未來 RAG 層只依賴 `VectorRetriever`；Retriever 依賴
+`VectorStore` 抽象，由 `ChromaStore` 負責把 Chroma 專屬回傳格式翻譯成
+中性的 `VectorMatch`：
+
+```text
+API / RAG → VectorRetriever → VectorStore 抽象 → ChromaStore
+```
+
+| 欄位 | 語意 | 排序 |
+| --- | --- | --- |
+| `distance` | cosine 時為 `1 - cosine_similarity` | 越小越相似 |
+| `score` | cosine 時為 `1 - distance` | 越大越相似 |
+
+`score` 的換算不依賴向量事先正規化，因為 cosine similarity 的定義
+本身就會除以向量模長。非 cosine metric 下 `score` 為 `null`，以原始
+`distance` 判斷。
+
+### Embedding 相容性檢查
+
+Retriever 搜尋前會比對 model name、revision、dimension、normalization 與
+distance metric。只比對維度不足夠：兩個模型即使維度相同，仍可能處於
+完全不同的 embedding space。若放行會形成沒有例外、但結果無意義的
+silent retrieval corruption。
+
+| 設定 | 預設 | 用途 |
+| --- | --- | --- |
+| `RETRIEVAL_TOP_K` | 5 | 未指定 `top_k` 時的回傳筆數 |
+| `RETRIEVAL_MAX_TOP_K` | 50 | 允許的上限，超過時回 HTTP 400 |
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/retrieval/search \
+  -H "Content-Type: application/json" \
+  -d '{"query":"第二型糖尿病的用藥是什麼？","top_k":3}'
+```
+
+```json
+{
+  "query": "第二型糖尿病的用藥是什麼？",
+  "top_k": 3,
+  "result_count": 1,
+  "results": [{
+    "chunk_id": "0123456789abcdef",
+    "document_id": "fedcba9876543210",
+    "text": "Metformin 500 mg twice daily.",
+    "distance": 0.12,
+    "score": 0.88,
+    "distance_metric": "cosine",
+    "metadata": {"source": "note.txt", "chunk_index": 0}
+  }]
+}
+```
+
+**Retriever 已可用，但 LLM 答案生成尚未實作；目前是語意搜尋引擎，
+不是 chatbot。**
 
 ## Phase 3：Embedding + Vector Store
 
@@ -56,7 +125,7 @@ Phase 1 的所有功能（FastAPI 應用、`GET /`、`GET /health`、三個模�
 
 ## 三、尚未完成內容
 
-以下功能**目前完全沒有實作**，相關模組只有預留骨架：Retriever（向量檢索）、
+以下功能**目前完全沒有實作**，相關模組只有預留骨架：
 Hybrid Search、Reranker、LLM 與 Ollama 整合、RAG 問答功能、前端介面、
 Docker 實際部署、評估指標。Embedding 與 ChromaDB indexing 已在 Phase 3 完成。
 
@@ -133,7 +202,7 @@ Medical-Rag-LLM/
 │   │   └── exceptions.py 自訂例外
 │   ├── schemas/          API 請求 / 回應結構
 │   ├── embeddings/       （未實作）
-│   ├── retrieval/        （未實作）
+│   ├── retrieval/        ★ Phase 4 檢索層主要實作
 │   ├── llm/              （未實作）
 │   ├── vector_store/     （未實作）
 │   ├── prompts/          （未實作）
@@ -280,6 +349,8 @@ curl.exe -X POST "http://127.0.0.1:8000/api/documents/upload" -F "file=@data/raw
 | `GET /api/documents/status` | documents 模組狀態 |
 | `POST /api/documents/upload` | **上傳並處理文件** |
 | `POST /api/documents/{document_id}/index` | **將 processed JSON 建立本地向量索引** |
+| `GET /api/retrieval/status` | retrieval 模組狀態（已實作） |
+| `POST /api/retrieval/search` | **以語意相似度檢索文件片段** |
 | `GET /api/query/status` | query 模組狀態（尚未實作） |
 | `GET /api/models/status` | embedding provider/model/device 設定（不載入模型） |
 
@@ -347,6 +418,22 @@ Windows 的 Chroma 檔案可能在 pytest 清理時仍被占用，因此將 base
 
 預期看到全部測試 passed。所有測試輸出都導向 pytest 的暫存目錄，**不會污染專案的 `data/` 目錄**。
 
+Phase 4 的離線測試可單獨執行：
+
+```bash
+python -m pytest -m "not integration"
+```
+
+真實 embedding + Chroma 的端對端檢索測試使用 `integration` marker：
+
+```bash
+python -m pytest -m integration -v
+```
+
+首次執行可能需下載固定 revision 的模型。只有在能明確辨識為網路不可用、
+模型或 revision 取得失敗、本地 cache 缺檔等環境問題時才會 skip；
+其他 embedding 實作錯誤一律視為測試失敗。
+
 真模型 CPU smoke test 會在首次執行時下載模型，不屬於一般單元測試。取得下載許可後才執行：
 
 ```powershell
@@ -400,11 +487,14 @@ Git 內統一使用 LF 換行（已由 `.gitattributes` 強制）。若 shell sc
 `data/raw/` 與 `data/processed/` 已列入 `.gitignore`，但仍請留意：一旦敏感檔案被 commit 並推送到遠端（尤其是公開 repo），**即使之後刪除檔案，commit 歷史中仍然找得到**。commit 前養成執行 `git status` 檢查的習慣。
 
 系統的 log 只記錄檔名、格式、單位數、chunk 數與耗時等統計資訊，**不會記錄文件正文、完整病歷或 chunk 全文**。
+Retriever 的 log 也只記錄查詢長度、`top_k` 與結果數，不記錄查詢全文或向量。
 
 **本系統不是醫療器材，不能取代醫師的專業判斷。** 系統的輸出僅供資訊參考，任何臨床決策都必須由具備資格的醫療專業人員依據完整的臨床脈絡做出。
 
 ## 十一、目前的能力界線
 
-Phase 2 完成的是「文件前處理」，也就是把文件變成結構良好、帶有完整來源資訊的文字片段。
+Phase 2 完成文件前處理，Phase 3 完成 Embedding 與 ChromaDB indexing，
+Phase 4 已可以依語意相似度檢索相關文件片段。
 
-**系統目前還無法回答任何問題。** Phase 3 已能產生 Embedding 並保存至 ChromaDB，但向量檢索、Retriever 與 LLM 生成尚未實作。Phase 4 才會加入 Retriever；現階段可以驗證文件前處理、向量化與持久化 indexing。
+**系統目前還無法產生自然語言答案。** Hybrid search、reranker、LLM 生成與
+最終引用整合仍屬後續 Phase。現階段是可用的本地語意搜尋引擎，不是 chatbot。

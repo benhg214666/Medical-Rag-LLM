@@ -2,7 +2,7 @@
 
 import sys
 from types import SimpleNamespace
-from app.indexing.dependencies import _get_cached_embedding_backend
+from app.embeddings.dependencies import get_cached_embedding_backend
 import time
 from concurrent.futures import ThreadPoolExecutor
 from threading import Lock
@@ -113,22 +113,22 @@ def test_non_e5_model_does_not_add_prefix(
     assert encoded_texts == [["document"], ["question"]]
 
 def test_embedding_backend_is_reused_across_requests() -> None:
-    _get_cached_embedding_backend.cache_clear()
+    get_cached_embedding_backend.cache_clear()
 
     try:
-        first = _get_cached_embedding_backend(
+        first = get_cached_embedding_backend(
             "local",
             "intfloat/multilingual-e5-small",
             "revision-a",
             "cpu",
         )
-        second = _get_cached_embedding_backend(
+        second = get_cached_embedding_backend(
             "local",
             "intfloat/multilingual-e5-small",
             "revision-a",
             "cpu",
         )
-        different_revision = _get_cached_embedding_backend(
+        different_revision = get_cached_embedding_backend(
             "local",
             "intfloat/multilingual-e5-small",
             "revision-b",
@@ -139,7 +139,7 @@ def test_embedding_backend_is_reused_across_requests() -> None:
         assert first is not different_revision
         assert first._model is None
     finally:
-        _get_cached_embedding_backend.cache_clear()
+        get_cached_embedding_backend.cache_clear()
 
 def test_model_is_loaded_once_under_concurrency(
     monkeypatch: pytest.MonkeyPatch,
