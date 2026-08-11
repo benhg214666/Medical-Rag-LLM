@@ -2,11 +2,30 @@
 
 ## 一、專案目的
 
-本專案的最終目標，是打造一套**完全在本地端執行**的醫療 RAG（Retrieval-Augmented Generation，檢索增強生成）系統。醫師或醫療人員可以把院內文件、指引、病歷等資料匯入系統，系統會將文件切分、轉成向量並存進本地向量資料庫；當使用者提出問題時，系統先檢索出最相關的段落，再交由本地 LLM 依據這些段落產生回答，並附上來源引用。
+本專案的最終目標，是打造一套使用**本地/私有基礎設施**的醫療 RAG（Retrieval-Augmented Generation，檢索增強生成）系統。醫師或醫療人員可以把院內文件、指引、病歷等資料匯入系統，系統會將文件切分、轉成向量並存進本地向量資料庫；當使用者提出問題時，系統先檢索出最相關的段落，再交由配置的本地 LLM 伺服器產生回答，並附上來源引用。
 
-之所以強調「本地」，是因為醫療資料具有高度敏感性，不適合送到外部雲端服務。整套流程留在本機，資料就不會離開機器。
+預設 `LLM_ALLOW_PRIVATE_NETWORK=false` 且 endpoint 為 loopback，檢索 context 留在同一主機。只有明確啟用 `LLM_ALLOW_PRIVATE_NETWORK=true` 時，應用才可將 context 送到核准的 Lab 私有 IP；此時資料會離開應用主機並經過私有網路。私有 IP 不代表傳輸自動安全，部署者仍須依組織政策處理網路隔離、傳輸保護與存取控制。
 
-**本專案採分階段（Phase）開發，目前已完成 Phase 6。**
+**本專案採分階段（Phase）開發，目前已完成 Phase 7 的倉庫端整合。**
+
+## Phase 7：ROCm 本地推論整合
+
+Phase 7 保留既有 OpenAI-compatible HTTP 邊界，讓 FastAPI RAG 應用與
+AMD GPU/ROCm 模型伺服器分離。vLLM 是文件中的主要 serving 範例，
+不是 production application dependency；實際相容性取決於 Lab 的 GPU、gfx、
+ROCm 與 runtime 版本。
+
+倉庫提供三個工具：
+
+```bash
+python scripts/check_runtime.py
+python scripts/smoke_test_llm.py
+python scripts/smoke_test_rag.py --query "What medication is in the indexed synthetic record?"
+```
+
+單元測試不需 GPU、ROCm、Docker、vLLM 或網路；真實端到端驗證需要
+已啟動的本地模型伺服器與已索引的合成/去識別文件。詳細步驟見
+[`docs/rocm_local_llm.md`](docs/rocm_local_llm.md)。
 
 ## Phase 5：本地 LLM + RAG 回答
 
@@ -28,6 +47,7 @@ Hugging Face 模型，也不綁定 CUDA、ROCm 或雲端 API。
 | `LLM_TEMPERATURE` | `0.0` | 生成溫度 |
 | `LLM_MAX_TOKENS` | `512` | 最大回答 tokens |
 | `LLM_TIMEOUT` | `60.0` | HTTP timeout（秒） |
+| `LLM_ALLOW_PRIVATE_NETWORK` | `false` | 是否明確允許 Lab 私有 IP endpoint |
 
 ```bash
 curl -X POST http://127.0.0.1:8000/api/rag/ask \
@@ -261,21 +281,23 @@ Medical-Rag-LLM/
 │   │   ├── models.py     LoadedDocument / DocumentChunk / IngestionResult
 │   │   └── exceptions.py 自訂例外
 │   ├── schemas/          API 請求 / 回應結構
-│   ├── embeddings/       （未實作）
+│   ├── embeddings/       Phase 3 本地 embedding
 │   ├── retrieval/        ★ Phase 4 檢索層主要實作
-│   ├── llm/              （未實作）
-│   ├── vector_store/     （未實作）
-│   ├── prompts/          （未實作）
-│   └── evaluation/       （未實作）
+│   ├── llm/              Phase 5 本地 LLM provider
+│   ├── rag/              Phase 5 RAG orchestration
+│   ├── vector_store/     Phase 3 ChromaDB abstraction
+│   ├── prompts/          Phase 5 RAG prompt builder
+│   └── evaluation/       Phase 6 品質評估
 ├── data/
 │   ├── raw/              上傳的原始檔（不進版控）
 │   ├── processed/        處理後的 JSON（不進版控）
-│   └── evaluation/       評估資料集（未使用）
+│   └── evaluation/       Phase 6 gold dataset / reports
+├── docs/                Phase 7 ROCm runtime 指南
 ├── configs/default.yaml  參數設計參考（尚未接入程式）
 ├── tests/                pytest 測試
 ├── requirements.txt
 ├── requirements-dev.txt
-├── scripts/smoke_embedding.py
+├── scripts/             embedding/runtime/smoke 工具
 ├── .env.example
 └── README.md
 ```

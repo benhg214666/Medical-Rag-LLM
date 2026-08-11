@@ -75,6 +75,8 @@ class Settings(BaseSettings):
     llm_temperature: float = 0.0
     llm_max_tokens: int = 512
     llm_timeout: float = 60.0
+    # 預設僅允許 loopback。Lab 內網推論伺服器必須明確 opt in。
+    llm_allow_private_network: bool = False
 
     @property
     def max_upload_size_bytes(self) -> int:

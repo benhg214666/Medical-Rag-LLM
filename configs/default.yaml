@@ -60,3 +60,4 @@ llm:
   temperature: 0.0
   max_tokens: 512
   timeout: 60.0
+  allow_private_network: false
