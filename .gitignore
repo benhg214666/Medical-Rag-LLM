@@ -50,3 +50,7 @@ data/processed/*
 data/evaluation/*
 !data/evaluation/.gitkeep
 !data/evaluation/example_cases.jsonl
+
+# Phase 8 runtime evaluation artifacts (versioned data lives in data/demo/)
+reports/demo/*
+!reports/demo/.gitkeep

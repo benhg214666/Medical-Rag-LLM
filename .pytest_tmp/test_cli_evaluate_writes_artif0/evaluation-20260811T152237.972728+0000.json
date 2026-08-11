@@ -1,0 +1,115 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-08-11T15:22:37.972728+00:00",
+  "environment": {
+    "model": "local-medical-model",
+    "collection": "medical_demo_v1",
+    "data_classification": "synthetic/de-identified; not for clinical use"
+  },
+  "totals": {
+    "case_count": 1,
+    "pass_count": 1,
+    "fail_count": 0,
+    "error_count": 0
+  },
+  "aggregate_metrics": {
+    "case_count": 1,
+    "answerable_count": 1,
+    "unanswerable_count": 0,
+    "retrieval_applicable_count": 1,
+    "retrieval_hit_rate_at_k": 1.0,
+    "mean_recall_at_k": 1.0,
+    "mean_reciprocal_rank": 1.0,
+    "citation_presence_applicable_count": 1,
+    "citation_presence_rate": 1.0,
+    "citation_validity_applicable_count": 1,
+    "citation_validity_rate": 1.0,
+    "citation_relevance_applicable_count": 1,
+    "citation_relevance_rate": 1.0,
+    "abstention_applicable_count": 0,
+    "abstention_accuracy": null,
+    "reference_f1_applicable_count": 1,
+    "mean_reference_token_f1": 0.9696969696969697
+  },
+  "quality_gate": {
+    "reference_token_f1_min": 0.3,
+    "reference_token_f1_applies_when": "reference_answer is present",
+    "purpose": "deterministic lexical demo sanity check only",
+    "not_proof_of": [
+      "semantic equivalence",
+      "medical correctness",
+      "clinical safety"
+    ]
+  },
+  "cases": [
+    {
+      "case_id": "DEMO-C001",
+      "question": "For patient DEMO-P001, what diabetes medicine and dose are documented, and what is the latest HbA1c?",
+      "expected_document_ids": [
+        "672ff899b84c584a"
+      ],
+      "expected_chunk_ids": [
+        "462bc507582ed594"
+      ],
+      "expected_facts": [
+        "metformin 500 mg by mouth twice daily",
+        "HbA1c 7.2 percent"
+      ],
+      "reference_answer": "DEMO-P001 takes metformin 500 mg twice daily and has an HbA1c of 7.2 percent.",
+      "answer": "DEMO-P001 takes metformin 500 mg twice daily and has an HbA1c of 7.2 percent. [1]",
+      "sources": [
+        {
+          "source_number": 1,
+          "chunk_id": "462bc507582ed594",
+          "document_id": "672ff899b84c584a",
+          "text": "Synthetic test evidence.",
+          "distance": 0.1,
+          "score": 0.9,
+          "distance_metric": "cosine",
+          "metadata": {
+            "source": "DEMO-P-test.txt"
+          }
+        }
+      ],
+      "metrics": {
+        "case_id": "DEMO-C001",
+        "query": "For patient DEMO-P001, what diabetes medicine and dose are documented, and what is the latest HbA1c?",
+        "answerable": true,
+        "top_k": 3,
+        "retrieval": {
+          "hit_at_k": 1.0,
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0
+        },
+        "answer": {
+          "generated_answer": "DEMO-P001 takes metformin 500 mg twice daily and has an HbA1c of 7.2 percent. [1]",
+          "citation_presence": true,
+          "citation_validity": 1.0,
+          "citation_relevance": 1.0,
+          "cited_source_numbers": [
+            1
+          ],
+          "invalid_citation_numbers": [],
+          "reference_token_f1": 0.9696969696969697,
+          "abstained": null
+        }
+      },
+      "quality_gate": {
+        "retrieval_hit_pass": true,
+        "citation_presence_pass": true,
+        "citation_validity_pass": true,
+        "citation_relevance_pass": true,
+        "reference_token_f1_applicable": true,
+        "reference_token_f1": 0.9696969696969697,
+        "reference_token_f1_pass": true
+      },
+      "status": "pass",
+      "error": null
+    }
+  ],
+  "limitations": [
+    "Generated wording can vary even with temperature zero.",
+    "This synthetic demo is not for clinical decision-making.",
+    "ROCm/GPU behavior must be verified on the target AMD host."
+  ]
+}

@@ -1,0 +1,8 @@
+SYNTHETIC DE-IDENTIFIED DEMO RECORD — NOT FOR CLINICAL USE
+Patient ID: DEMO-P003 (fictional)
+Encounter: thyroid medication monitoring.
+Diagnosis: primary hypothyroidism.
+Medication: levothyroxine 75 micrograms by mouth every morning before food.
+Laboratory: TSH 2.1 mIU/L on 2026-07-02, within the fictional clinic target range.
+Allergies: sulfonamide antibiotics, with a documented hives reaction.
+Plan: continue the same dose and repeat TSH in six months.

@@ -1,0 +1,8 @@
+SYNTHETIC DE-IDENTIFIED DEMO RECORD — NOT FOR CLINICAL USE
+Patient ID: DEMO-P001 (fictional)
+Encounter: routine diabetes follow-up.
+Diagnoses: type 2 diabetes mellitus and hypertension.
+Medications: metformin 500 mg by mouth twice daily; lisinopril 10 mg by mouth daily.
+Allergies: penicillin, with a documented rash reaction.
+Laboratory: HbA1c 7.2 percent on 2026-06-15.
+Plan: continue current medicines and repeat HbA1c in three months.

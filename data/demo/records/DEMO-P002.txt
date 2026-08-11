@@ -1,0 +1,7 @@
+SYNTHETIC DE-IDENTIFIED DEMO RECORD — NOT FOR CLINICAL USE
+Patient ID: DEMO-P002 (fictional)
+Encounter: asthma follow-up after intermittent nighttime symptoms.
+Diagnosis: mild persistent asthma.
+Medications: budesonide inhaler 180 micrograms, one puff twice daily; albuterol inhaler, two puffs as needed.
+Allergies: no known drug allergies.
+Plan: review inhaler technique and return in six weeks; seek urgent care for severe breathing difficulty.

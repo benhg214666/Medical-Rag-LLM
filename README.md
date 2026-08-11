@@ -1,12 +1,28 @@
 # Medical Local RAG（醫療本地 RAG 系統）
 
+## Phase 8：可重現 demo
+
+Phase 8 提供固定 synthetic/de-identified 資料、隔離的
+`medical_demo_v1` collection、真實 RAG pipeline runner，以及 JSON/Markdown
+evaluation 匯出。資料與輸出皆 **not for clinical use**。
+
+```bash
+python scripts/demo.py preflight --allow-unseeded
+python scripts/demo.py seed --reset
+python scripts/demo.py run
+python scripts/demo.py evaluate --output-dir reports/demo
+```
+
+完整啟動、5–10 分鐘講稿、停止與復原方式請見
+[`docs/DEMO_GUIDE.md`](docs/DEMO_GUIDE.md)。
+
 ## 一、專案目的
 
 本專案的最終目標，是打造一套使用**本地/私有基礎設施**的醫療 RAG（Retrieval-Augmented Generation，檢索增強生成）系統。醫師或醫療人員可以把院內文件、指引、病歷等資料匯入系統，系統會將文件切分、轉成向量並存進本地向量資料庫；當使用者提出問題時，系統先檢索出最相關的段落，再交由配置的本地 LLM 伺服器產生回答，並附上來源引用。
 
 預設 `LLM_ALLOW_PRIVATE_NETWORK=false` 且 endpoint 為 loopback，檢索 context 留在同一主機。只有明確啟用 `LLM_ALLOW_PRIVATE_NETWORK=true` 時，應用才可將 context 送到核准的 Lab 私有 IP；此時資料會離開應用主機並經過私有網路。私有 IP 不代表傳輸自動安全，部署者仍須依組織政策處理網路隔離、傳輸保護與存取控制。
 
-**本專案採分階段（Phase）開發，目前已完成 Phase 7 的倉庫端整合。**
+**本專案採分階段（Phase）開發：Phase 1–7 系統與 Lab ROCm runtime 已完成，Phase 8 demo/presentation-readiness tooling 已實作。**
 
 ## Phase 7：ROCm 本地推論整合
 

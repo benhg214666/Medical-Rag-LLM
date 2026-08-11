@@ -1,0 +1,36 @@
+{
+  "mode": "retrieval",
+  "aggregate": {
+    "case_count": 1,
+    "answerable_count": 1,
+    "unanswerable_count": 0,
+    "retrieval_applicable_count": 1,
+    "retrieval_hit_rate_at_k": 1.0,
+    "mean_recall_at_k": 1.0,
+    "mean_reciprocal_rank": 1.0,
+    "citation_presence_applicable_count": 0,
+    "citation_presence_rate": null,
+    "citation_validity_applicable_count": 0,
+    "citation_validity_rate": null,
+    "citation_relevance_applicable_count": 0,
+    "citation_relevance_rate": null,
+    "abstention_applicable_count": 0,
+    "abstention_accuracy": null,
+    "reference_f1_applicable_count": 0,
+    "mean_reference_token_f1": null
+  },
+  "cases": [
+    {
+      "case_id": "case-1",
+      "query": "What medication is documented?",
+      "answerable": true,
+      "top_k": 5,
+      "retrieval": {
+        "hit_at_k": 1.0,
+        "recall_at_k": 1.0,
+        "reciprocal_rank": 1.0
+      },
+      "answer": null
+    }
+  ]
+}

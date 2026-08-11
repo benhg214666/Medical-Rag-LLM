@@ -1,0 +1,8 @@
+SYNTHETIC DE-IDENTIFIED DEMO RECORD — NOT FOR CLINICAL USE
+Patient ID: DEMO-P004 (fictional)
+Encounter: lipid management visit.
+Diagnoses: hyperlipidemia; no documented diabetes.
+Medication: atorvastatin 20 mg by mouth nightly.
+Laboratory: LDL cholesterol 96 mg/dL on 2026-05-20.
+Allergies: no known drug allergies.
+Plan: continue atorvastatin and repeat a fasting lipid panel in twelve months.
