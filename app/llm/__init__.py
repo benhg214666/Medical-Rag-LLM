@@ -1,1 +1,5 @@
-"""LLM 子系統。Phase 1 尚未實作。"""
+"""Local LLM abstraction."""
+
+from app.llm.base import LLMError, LLMProvider
+
+__all__ = ["LLMError", "LLMProvider"]

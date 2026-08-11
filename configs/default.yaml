@@ -53,8 +53,10 @@ retrieval:
   # 允許的 top_k 上限；超過會回 HTTP 400 而不是靜默截斷。
   max_top_k: 50
 
-# --- 以下為未來 Phase 的設計草稿，尚未實作 ---
-
 llm:
-  backend: local
-  model_name: null
+  provider: openai_compatible
+  base_url: http://127.0.0.1:8001/v1
+  model_name: local-medical-model
+  temperature: 0.0
+  max_tokens: 512
+  timeout: 60.0

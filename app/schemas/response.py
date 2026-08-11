@@ -133,3 +133,23 @@ class RetrievalSearchResponse(BaseModel):
     top_k: int
     result_count: int
     results: list[RetrievalResultItem] = Field(default_factory=list)
+
+
+class RAGSourceItem(RetrievalResultItem):
+    """Numbered evidence returned with a generated answer."""
+
+    source_number: int
+
+
+class RAGAskResponse(BaseModel):
+    """Grounded answer and the exact retrieval evidence used to produce it."""
+
+    answer: str
+    model: str
+    sources: list[RAGSourceItem] = Field(default_factory=list)
+
+
+class RAGStatusResponse(ModuleStatusResponse):
+    """Non-sensitive RAG configuration status."""
+
+    model: str

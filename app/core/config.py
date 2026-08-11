@@ -68,6 +68,14 @@ class Settings(BaseSettings):
     # 造成不必要的記憶體與序列化負擔（等同一種 DoS 防護）。
     retrieval_max_top_k: int = 50
 
+    # --- Phase 5：本地 OpenAI-compatible LLM ---
+    llm_provider: str = "openai_compatible"
+    llm_base_url: str = "http://127.0.0.1:8001/v1"
+    llm_model_name: str = "local-medical-model"
+    llm_temperature: float = 0.0
+    llm_max_tokens: int = 512
+    llm_timeout: float = 60.0
+
     @property
     def max_upload_size_bytes(self) -> int:
         """上傳大小上限，換算成 bytes 以便與檔案長度直接比較。"""

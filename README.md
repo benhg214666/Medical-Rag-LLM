@@ -6,7 +6,36 @@
 
 之所以強調「本地」，是因為醫療資料具有高度敏感性，不適合送到外部雲端服務。整套流程留在本機，資料就不會離開機器。
 
-**本專案採分階段（Phase）開發，目前已完成 Phase 4。**
+**本專案採分階段（Phase）開發，目前已完成 Phase 5。**
+
+## Phase 5：本地 LLM + RAG 回答
+
+完整問答管線為：
+
+```text
+Question → Retriever → Numbered Context → Local LLM → Answer + Sources
+```
+
+RAG 服務只依賴專案的 LLM provider 介面，實際模型由另一個本地
+OpenAI-compatible chat-completions server 提供，因此 FastAPI 不會直接載入
+Hugging Face 模型，也不綁定 CUDA、ROCm 或雲端 API。
+
+| 設定 | 預設 | 用途 |
+| --- | --- | --- |
+| `LLM_PROVIDER` | `openai_compatible` | LLM provider |
+| `LLM_BASE_URL` | `http://127.0.0.1:8001/v1` | 本地推論服務 |
+| `LLM_MODEL_NAME` | `local-medical-model` | 服務器公開的模型名 |
+| `LLM_TEMPERATURE` | `0.0` | 生成溫度 |
+| `LLM_MAX_TOKENS` | `512` | 最大回答 tokens |
+| `LLM_TIMEOUT` | `60.0` | HTTP timeout（秒） |
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/rag/ask \
+  -H "Content-Type: application/json" \
+  -d '{"query":"What medications is this patient taking?","top_k":5}'
+```
+
+沒有可用檢索內容時會直接回傳資料不足與空 `sources`，不會呼叫 LLM。
 
 ## Phase 4：Retriever（檢索層）
 
@@ -74,8 +103,7 @@ curl -X POST http://127.0.0.1:8000/api/retrieval/search \
 }
 ```
 
-**Retriever 已可用，但 LLM 答案生成尚未實作；目前是語意搜尋引擎，
-不是 chatbot。**
+**Retriever 同時供獨立語意搜尋 API 與 Phase 5 RAG 服務重用。**
 
 ## Phase 3：Embedding + Vector Store
 
@@ -110,8 +138,8 @@ Phase 3 預設 CPU 執行，embedding 模型固定為
 不下載模型，也不需要 GPU、ROCm、網路或 Hugging Face 連線。真模型 smoke test
 必須另外明確執行。
 
-目前仍不是完整 RAG：尚未實作 Retriever、語意搜尋、LLM 或答案生成。Phase 4 才會加入
-Retriever，本階段不提供 Top-K search API。
+目前 Phase 3 索引、Phase 4 Top-K 語意搜尋與 Phase 5 RAG 答案生成
+已串接完成。
 
 主要執行與部署環境為 Linux（公司 Lab 遠端主機），未來可使用 AMD GPU 與 ROCm。但 Phase 3 預設 CPU，純 CPU 環境即可啟動 API 與執行全部測試。
 
@@ -350,7 +378,9 @@ curl.exe -X POST "http://127.0.0.1:8000/api/documents/upload" -F "file=@data/raw
 | `POST /api/documents/upload` | **上傳並處理文件** |
 | `POST /api/documents/{document_id}/index` | **將 processed JSON 建立本地向量索引** |
 | `GET /api/retrieval/status` | retrieval 模組狀態（已實作） |
-| `POST /api/retrieval/search` | **以語意相似度檢索文件片段** |
+| `POST /api/retrieval/search` | **Top-K 語意檢索** |
+| `GET /api/rag/status` | RAG 模組狀態與模型名 |
+| `POST /api/rag/ask` | **產生有來源引用的 RAG 回答** |
 | `GET /api/query/status` | query 模組狀態（尚未實作） |
 | `GET /api/models/status` | embedding provider/model/device 設定（不載入模型） |
 
@@ -493,8 +523,10 @@ Retriever 的 log 也只記錄查詢長度、`top_k` 與結果數，不記錄查
 
 ## 十一、目前的能力界線
 
-Phase 2 完成文件前處理，Phase 3 完成 Embedding 與 ChromaDB indexing，
-Phase 4 已可以依語意相似度檢索相關文件片段。
+Phase 2 完成文件匯入與前處理；Phase 3 完成 Embedding 與 ChromaDB
+索引；Phase 4 完成 Top-K 語意檢索；Phase 5 已可透過另行啟動的
+本地 LLM，依檢索內容產生自然語言回答，並保留編號來源與 metadata
+以供追溯。
 
-**系統目前還無法產生自然語言答案。** Hybrid search、reranker、LLM 生成與
-最終引用整合仍屬後續 Phase。現階段是可用的本地語意搜尋引擎，不是 chatbot。
+Hybrid retrieval、reranking、正式 RAG evaluation、前端、對話記憶、
+進階醫療 guardrails 與 production deployment 仍屬後續工作。

@@ -38,3 +38,10 @@ class RetrievalSearchRequest(BaseModel):
             "最多回傳幾筆結果；必須是整數，未提供時採用伺服器設定的預設值。"
         ),
     )
+
+
+class RAGAskRequest(BaseModel):
+    """POST /api/rag/ask request."""
+
+    query: str = Field(..., min_length=1, description="不可為空白的醫療紀錄問題。")
+    top_k: StrictInt | None = Field(default=None, ge=1)
