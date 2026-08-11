@@ -1,1 +1,6 @@
-"""評估（evaluation）子系統。Phase 1 尚未實作。"""
+"""Lightweight deterministic RAG quality evaluation."""
+
+from app.evaluation.evaluator import Evaluator
+from app.evaluation.models import EvaluationCase, EvaluationReport
+
+__all__ = ["EvaluationCase", "EvaluationReport", "Evaluator"]

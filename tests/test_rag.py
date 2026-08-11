@@ -11,6 +11,7 @@ from app.llm.local_backend import OpenAICompatibleLLM
 from app.main import app
 from app.prompts.prompt_builder import build_rag_prompt
 from app.rag.dependencies import get_rag_service
+from app.rag.constants import INSUFFICIENT_CONTEXT_ANSWER
 from app.rag.service import NO_CONTEXT_ANSWER, RAGService
 from app.retrieval.models import RetrievalResult
 
@@ -68,6 +69,7 @@ def test_prompt_contains_question_text_and_consistent_numbers() -> None:
     assert "[Source 1]\nPatient takes metformin." in prompt.user
     assert "[Source 2]\nNo allergies." in prompt.user
     assert "untrusted reference data" in prompt.system
+    assert INSUFFICIENT_CONTEXT_ANSWER in prompt.system
 
 
 def test_service_retrieves_generates_and_preserves_sources() -> None:

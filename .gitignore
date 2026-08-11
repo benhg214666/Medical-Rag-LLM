@@ -49,3 +49,4 @@ data/processed/*
 !data/processed/.gitkeep
 data/evaluation/*
 !data/evaluation/.gitkeep
+!data/evaluation/example_cases.jsonl

@@ -6,7 +6,7 @@
 
 之所以強調「本地」，是因為醫療資料具有高度敏感性，不適合送到外部雲端服務。整套流程留在本機，資料就不會離開機器。
 
-**本專案採分階段（Phase）開發，目前已完成 Phase 5。**
+**本專案採分階段（Phase）開發，目前已完成 Phase 6。**
 
 ## Phase 5：本地 LLM + RAG 回答
 
@@ -36,6 +36,38 @@ curl -X POST http://127.0.0.1:8000/api/rag/ask \
 ```
 
 沒有可用檢索內容時會直接回傳資料不足與空 `sources`，不會呼叫 LLM。
+
+## Phase 6：RAG 評估與品質驗證
+
+Phase 6 以 JSONL gold dataset 重用 Phase 4 Retriever 與 Phase 5 RAGService，
+提供可重現的 retrieval-only 與 end-to-end RAG 評估：
+
+- Hit@K：Top-K 是否至少命中一個預期來源。
+- Recall@K：Top-K 命中的預期來源比例。
+- MRR：第一個相關來源排名的倒數平均。
+- Citation validity：引用編號是否實際存在於返回 sources。
+- Citation relevance：被引用 source 是否符合 gold document/chunk ID。
+- Abstention accuracy：不可回答案例是否回傳專案明確定義的資料不足回應；
+  不只以沒有檢索 sources 當判斷依據。
+- Reference token F1：非 CJK 字母數字保留為連續 token，CJK 漢字以單字為
+  可重現的字面單位（不是中文分詞）。此 F1 不代表語意等價、事實正確、
+  醫療正確或臨床安全。
+
+`data/evaluation/example_cases.jsonl` 是無 PHI 的合成範本；其
+`REPLACE_WITH_INDEXED_DOCUMENT_ID` 必須替換為自行匯入且已知正確性的測試文件 ID。
+實際 gold set 應由人工從合成或去識別文件標註 document/chunk ID。
+
+```bash
+# 只評估檢索，不呼叫 LLM
+python -m app.evaluation.cli --dataset data/evaluation/cases.jsonl --mode retrieval
+
+# 端到端 RAG（需本地 LLM server）並儲存 JSON report
+python -m app.evaluation.cli --dataset data/evaluation/cases.jsonl --mode rag \
+  --output data/evaluation/results.json
+```
+
+聚合指標只使用適用案例當分母：沒有 relevance label 的案例不會被當成
+retrieval 失敗，沒有 reference answer 的案例也不會被當成 F1=0。
 
 ## Phase 4：Retriever（檢索層）
 
@@ -153,9 +185,9 @@ Phase 1 的所有功能（FastAPI 應用、`GET /`、`GET /health`、三個模�
 
 ## 三、尚未完成內容
 
-以下功能**目前完全沒有實作**，相關模組只有預留骨架：
-Hybrid Search、Reranker、LLM 與 Ollama 整合、RAG 問答功能、前端介面、
-Docker 實際部署、評估指標。Embedding 與 ChromaDB indexing 已在 Phase 3 完成。
+以下功能目前尚未實作：Hybrid Search、Reranker、前端介面與
+Docker 實際部署。Embedding、ChromaDB indexing、Retriever、RAG 問答與
+輕量評估已分別在 Phase 3–6 完成。
 
 另外**本階段不支援掃描式 PDF 的 OCR**。掃描式 PDF 的內容是影像而非文字圖層，系統無法抽取文字，會明確回報錯誤訊息告知這可能是掃描式 PDF 且本階段不支援 OCR，而不是靜默回傳空結果。
 
@@ -526,7 +558,7 @@ Retriever 的 log 也只記錄查詢長度、`top_k` 與結果數，不記錄查
 Phase 2 完成文件匯入與前處理；Phase 3 完成 Embedding 與 ChromaDB
 索引；Phase 4 完成 Top-K 語意檢索；Phase 5 已可透過另行啟動的
 本地 LLM，依檢索內容產生自然語言回答，並保留編號來源與 metadata
-以供追溯。
+以供追溯；Phase 6 提供 retrieval-only 與 end-to-end RAG 的可重現品質評估。
 
-Hybrid retrieval、reranking、正式 RAG evaluation、前端、對話記憶、
+Hybrid retrieval、reranking、大型 benchmark / LLM judge、前端、對話記憶、
 進階醫療 guardrails 與 production deployment 仍屬後續工作。

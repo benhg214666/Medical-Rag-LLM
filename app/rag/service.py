@@ -2,13 +2,13 @@
 
 from app.llm.base import LLMProvider
 from app.prompts.prompt_builder import build_rag_prompt
+from app.rag.constants import INSUFFICIENT_CONTEXT_ANSWER
 from app.rag.models import RAGAnswer, RAGSource
 from app.retrieval.models import RetrievalResult
 from app.retrieval.vector_retriever import VectorRetriever
 
-NO_CONTEXT_ANSWER = (
-    "The available documents do not contain enough information to answer this question."
-)
+# Backward-compatible name for callers that imported the Phase 5 constant.
+NO_CONTEXT_ANSWER = INSUFFICIENT_CONTEXT_ANSWER
 
 
 class RAGService:
