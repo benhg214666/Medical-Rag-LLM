@@ -1,1 +1,0 @@
-{"id": "case-1", "query": "What medication is documented?", "answerable": true, "top_k": 5, "expected_document_ids": [], "expected_chunk_ids": ["c-relevant"], "reference_answer": "Patient takes metformin.", "tags": []}

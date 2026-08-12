@@ -57,3 +57,4 @@ data/evaluation/*
 # Phase 8 runtime evaluation artifacts (versioned data lives in data/demo/)
 reports/demo/*
 !reports/demo/.gitkeep
+.pytest_tmp/
