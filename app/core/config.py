@@ -33,6 +33,12 @@ class Settings(BaseSettings):
     app_version: str = "0.1.0"
     app_env: str = "development"
     log_level: str = "INFO"
+    cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
+
+    @property
+    def cors_origin_list(self) -> list[str]:
+        """Return the explicitly configured browser origins."""
+        return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
 
     # --- Phase 2：資料目錄 ---
     # 使用相對路徑，讓專案可以搬到任何機器（含 Linux Lab 主機）而不需修改設定。
