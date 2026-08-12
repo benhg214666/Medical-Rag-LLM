@@ -113,7 +113,7 @@ class VectorRetriever:
 
         self._compatibility_verified = True
 
-    def _resolve_top_k(self, top_k: int | None) -> int:
+    def resolve_top_k(self, top_k: int | None) -> int:
         """驗證並決定實際使用的 top_k。
 
         None 代表呼叫端未指定，採用設定檔預設值；
@@ -197,7 +197,7 @@ class VectorRetriever:
             RetrievalBackendError: embedding 或 vector store 失敗。
         """
         normalized_query = self._validate_query(query)
-        resolved_top_k = self._resolve_top_k(top_k)
+        resolved_top_k = self.resolve_top_k(top_k)
 
         # 即使呼叫端忘了呼叫 ensure_ready()（例如直接使用 Retriever
         # 而非透過 FastAPI dependency），也絕不在未驗證的狀態下搜尋。

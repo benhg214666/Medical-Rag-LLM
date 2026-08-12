@@ -20,7 +20,7 @@ from app.retrieval.exceptions import (
     RetrievalBackendError,
     RetrievalValidationError,
 )
-from app.retrieval.vector_retriever import VectorRetriever
+from app.retrieval.pipeline import RetrievalPipeline
 from app.schemas.request import RetrievalSearchRequest
 from app.schemas.response import (
     ModuleStatusResponse,
@@ -51,9 +51,9 @@ def get_retrieval_status() -> ModuleStatusResponse:
 )
 def search(
     payload: RetrievalSearchRequest,
-    retriever: VectorRetriever = Depends(get_vector_retriever),
+    retriever: RetrievalPipeline = Depends(get_vector_retriever),
 ) -> RetrievalSearchResponse:
-    """執行 query -> embedding -> 向量搜尋 -> 排序結果。
+    """執行 query -> embedding -> 候選向量搜尋 -> 輕量重排。
 
     查無結果會回傳 200 與空陣列，而不是 404：
     「沒有語意相近的片段」是一個有效的檢索結果，

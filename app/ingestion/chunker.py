@@ -17,6 +17,7 @@ token 是 embedding 模型的 tokenizer 切出來的單位，中文與英文的�
 
 import hashlib
 import logging
+import re
 
 from app.ingestion.exceptions import InvalidChunkConfigError
 from app.ingestion.models import DocumentChunk, LoadedDocument
@@ -39,6 +40,97 @@ _SEPARATOR_GROUPS: tuple[tuple[str, ...], ...] = (
 # 邊界搜尋的最小可接受比例：只在 chunk 後半段找分隔符。
 # 若允許在很前面切，會產生大量過短的 chunk，反而破壞語意完整性。
 _MIN_BOUNDARY_RATIO = 0.5
+
+SECTION_TITLE_KEY = "section_title"
+SECTION_PATH_KEY = "section_path"
+
+_DELIMITED_HEADING = re.compile(
+    r"^\s*(?:={2,}|#{1,6})\s*(?P<title>.+?)\s*(?:={2,})?\s*$"
+)
+_DATE_PREFIXED_HEADING = re.compile(
+    r"^\s*\d{4}[-/.]\d{1,2}[-/.]\d{1,2}\b.+$"
+)
+_BULLET_PREFIX = re.compile(r"^\s*(?:[-*•]|\d+[.)])\s+")
+
+
+def _clean_heading_title(line: str) -> str:
+    match = _DELIMITED_HEADING.match(line)
+    return (match.group("title") if match else line).strip().strip("#=").strip()
+
+
+def _is_short_standalone_heading(line: str) -> bool:
+    candidate = line.strip()
+    if not candidate or len(candidate) > 100 or _BULLET_PREFIX.match(candidate):
+        return False
+    if candidate.endswith((".", "!", "?", ";", "。", "！", "？", "；")):
+        return False
+    if candidate.endswith(":"):
+        return len(candidate[:-1].split()) <= 12
+    words = candidate.split()
+    if not (1 <= len(words) <= 10) or any(char.isdigit() for char in candidate):
+        return False
+    cased_words = [word for word in words if any(char.isalpha() for char in word)]
+    if not cased_words:
+        return len(candidate) <= 20
+    return all(
+        word.isupper() or next(char for char in word if char.isalpha()).isupper()
+        for word in cased_words
+    )
+
+
+def _heading_updates(chunk: DocumentChunk) -> list[tuple[str, str]]:
+    """Return ordered (level, title) updates found in one chunk."""
+    updates: list[tuple[str, str]] = []
+    metadata_title = chunk.metadata.get("heading_title")
+    metadata_level = chunk.metadata.get("heading_level")
+    if isinstance(metadata_title, str) and metadata_title.strip():
+        updates.append(
+            ("parent" if metadata_level == 1 else "subsection", metadata_title.strip())
+        )
+
+    for raw_line in chunk.text.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        delimited = _DELIMITED_HEADING.match(line)
+        title = _clean_heading_title(line)
+        # Overlap can begin on the closing delimiter line (for example "===").
+        # It is not a heading and must not clear the active parent context.
+        if not title:
+            continue
+        if delimited or _DATE_PREFIXED_HEADING.match(title):
+            updates.append(("parent", title))
+        elif _is_short_standalone_heading(line):
+            updates.append(("subsection", title.rstrip(":")))
+    return updates
+
+
+def preserve_section_context(chunks: list[DocumentChunk]) -> list[DocumentChunk]:
+    """Propagate deterministic parent/subsection context in document order."""
+    parent: str | None = None
+    subsection: str | None = None
+    enriched: list[DocumentChunk] = []
+
+    for chunk in chunks:
+        for level, title in _heading_updates(chunk):
+            if level == "parent":
+                parent = title
+                subsection = None
+            else:
+                subsection = title
+
+        metadata = dict(chunk.metadata)
+        section_title = parent or subsection
+        if section_title:
+            metadata[SECTION_TITLE_KEY] = section_title
+            metadata[SECTION_PATH_KEY] = (
+                f"{parent} > {subsection}"
+                if parent and subsection and subsection != parent
+                else section_title
+            )
+        enriched.append(chunk.model_copy(update={"metadata": metadata}))
+
+    return enriched
 
 
 def validate_chunk_config(
@@ -251,6 +343,11 @@ def _merge_short_docx_documents(
     buffer_length = 0
 
     for document in documents:
+        if document.metadata.get("heading_title") and buffer:
+            groups.append(buffer)
+            buffer = []
+            buffer_length = 0
+
         if buffer:
             # 合併時會在段落間加入一個換行字元。
             buffer_length += 1
@@ -265,7 +362,7 @@ def _merge_short_docx_documents(
 
     # 最後若剩下一小段，併入前一組，避免產生尾端超短 chunk。
     if buffer:
-        if groups:
+        if groups and not buffer[0].metadata.get("heading_title"):
             groups[-1].extend(buffer)
         else:
             # 整份 DOCX 本身就小於 min_chunk_size 時沒有其他內容可合併。
@@ -335,7 +432,7 @@ def chunk_document(
             )
         )
 
-    return chunks
+    return preserve_section_context(chunks)
 
 
 def chunk_documents(
@@ -372,6 +469,8 @@ def chunk_documents(
             document_id=document_id,
         )
         all_chunks.extend(chunks)
+
+    all_chunks = preserve_section_context(all_chunks)
 
     logger.info(
         "切塊完成：%d 個文件單位 -> %d 個 chunk（chunk_size=%d, overlap=%d）",

@@ -392,8 +392,26 @@ def _seeded_memory_store() -> MemoryDemoStore:
     return store
 
 
+def _isolated_preflight_settings(*, llm_model_name: str = "preflight-test-model") -> Settings:
+    """Return preflight settings that cannot inherit relevant local overrides."""
+    return Settings(
+        _env_file=None,
+        vector_store_provider="chroma",
+        embedding_provider="local",
+        embedding_model_name="test-embedding-model",
+        embedding_model_revision="test-revision",
+        embedding_batch_size=1,
+        llm_provider="openai_compatible",
+        llm_base_url="http://127.0.0.1:8001/v1",
+        llm_model_name=llm_model_name,
+        llm_allow_private_network=False,
+    )
+
+
 def test_preflight_checks_configured_model_and_optional_api(monkeypatch, capsys) -> None:
     store = _seeded_memory_store()
+    settings = _isolated_preflight_settings()
+    monkeypatch.setattr("app.demo.cli.get_settings", lambda: settings)
     monkeypatch.setattr("app.demo.cli.create_vector_store", lambda settings: store)
     monkeypatch.setattr(
         "app.demo.cli.get_embedding_backend_for",
@@ -403,7 +421,9 @@ def test_preflight_checks_configured_model_and_optional_api(monkeypatch, capsys)
     def fake_urlopen(request, timeout):
         url = request.full_url
         if url.endswith("/models"):
-            return FakeHTTPResponse({"object": "list", "data": [{"id": "local-medical-model"}]})
+            return FakeHTTPResponse(
+                {"object": "list", "data": [{"id": settings.llm_model_name}]}
+            )
         raise urllib.error.URLError("FastAPI not running")
 
     monkeypatch.setattr("app.demo.cli._LOCAL_URL_OPENER.open", fake_urlopen)
@@ -419,6 +439,8 @@ def test_preflight_checks_configured_model_and_optional_api(monkeypatch, capsys)
 
 def test_preflight_rejects_wrong_served_model_and_blank_setting(monkeypatch, capsys) -> None:
     store = _seeded_memory_store()
+    settings = _isolated_preflight_settings()
+    monkeypatch.setattr("app.demo.cli.get_settings", lambda: settings)
     monkeypatch.setattr("app.demo.cli.create_vector_store", lambda settings: store)
     monkeypatch.setattr(
         "app.demo.cli.get_embedding_backend_for",
@@ -433,7 +455,7 @@ def test_preflight_rejects_wrong_served_model_and_blank_setting(monkeypatch, cap
 
     monkeypatch.setattr(
         "app.demo.cli.get_settings",
-        lambda: Settings(llm_model_name=""),
+        lambda: _isolated_preflight_settings(llm_model_name=""),
     )
     assert main(["preflight"]) == 1
     assert "LLM_MODEL_NAME must not be blank" in capsys.readouterr().err
@@ -441,6 +463,9 @@ def test_preflight_rejects_wrong_served_model_and_blank_setting(monkeypatch, cap
 
 def test_preflight_embedding_failure_is_actionable(monkeypatch, capsys) -> None:
     store = _seeded_memory_store()
+    monkeypatch.setattr(
+        "app.demo.cli.get_settings", _isolated_preflight_settings
+    )
     monkeypatch.setattr("app.demo.cli.create_vector_store", lambda settings: store)
 
     class BrokenEmbedding(FakeEmbeddingBackend):

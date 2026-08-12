@@ -7,7 +7,10 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.llm.base import LLMError
-from app.llm.local_backend import OpenAICompatibleLLM
+from app.llm.local_backend import (
+    OllamaOpenAICompatibleLLM,
+    OpenAICompatibleLLM,
+)
 from app.main import app
 from app.prompts.prompt_builder import build_rag_prompt
 from app.rag.dependencies import get_rag_service
@@ -108,6 +111,87 @@ def test_local_provider_payload_and_response() -> None:
         timeout=1, client=client,
     )
     assert provider.generate(system_prompt="system", user_prompt="question") == "answer"
+
+
+def test_vllm_style_response_and_payload_remain_standard() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = __import__("json").loads(request.content)
+        assert "reasoning_effort" not in body
+        return httpx.Response(
+            200,
+            json={
+                "id": "chatcmpl-vllm",
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {"role": "assistant", "content": "vLLM answer"},
+                        "finish_reason": "stop",
+                    }
+                ],
+            },
+        )
+
+    client = httpx.Client(
+        base_url="http://local.test/v1", transport=httpx.MockTransport(handler)
+    )
+    provider = OpenAICompatibleLLM(
+        base_url="http://unused", model_name="model", temperature=0,
+        max_tokens=10, timeout=1, client=client,
+    )
+    assert provider.generate(system_prompt="system", user_prompt="question") == "vLLM answer"
+
+
+def test_ollama_thinking_response_uses_only_final_content() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = __import__("json").loads(request.content)
+        assert body["reasoning_effort"] == "none"
+        return httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {
+                        "message": {
+                            "role": "assistant",
+                            "content": "grounded final answer [1]",
+                            "reasoning": "private reasoning must not be returned",
+                        },
+                        "finish_reason": "stop",
+                    }
+                ]
+            },
+        )
+
+    client = httpx.Client(
+        base_url="http://local.test/v1", transport=httpx.MockTransport(handler)
+    )
+    provider = OllamaOpenAICompatibleLLM(
+        base_url="http://unused", model_name="any-thinking-model", temperature=0,
+        max_tokens=10, timeout=1, client=client,
+    )
+    assert provider.generate(system_prompt="system", user_prompt="question") == "grounded final answer [1]"
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"choices": [{"message": {"content": "", "reasoning": "hidden"}}]},
+        {"choices": [{"message": {"content": None, "reasoning": "hidden"}}]},
+        {"choices": []},
+        {"choices": [{}]},
+        {"choices": [{"message": []}]},
+    ],
+)
+def test_final_content_must_be_nonempty_even_when_reasoning_exists(payload) -> None:
+    client = httpx.Client(
+        base_url="http://local.test/v1",
+        transport=httpx.MockTransport(lambda request: httpx.Response(200, json=payload)),
+    )
+    provider = OllamaOpenAICompatibleLLM(
+        base_url="http://unused", model_name="model", temperature=0,
+        max_tokens=10, timeout=1, client=client,
+    )
+    with pytest.raises(LLMError):
+        provider.generate(system_prompt="system", user_prompt="question")
 
 
 def test_internal_local_client_does_not_inherit_proxy_environment() -> None:

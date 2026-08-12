@@ -52,9 +52,18 @@ retrieval:
   top_k: 5
   # 允許的 top_k 上限；超過會回 HTTP 400 而不是靜默截斷。
   max_top_k: 50
+  # 先擴大語意候選池，再以字詞、日期與查詢詞精確匹配重排；最終仍只回傳 top_k。
+  candidate_multiplier: 2
+  min_candidate_k: 10
+  reranking:
+    enabled: true
+    lexical_weight: 0.15
+    exact_date_bonus: 0.35
+    exact_term_weight: 0.10
 
 llm:
   provider: openai_compatible
+  compatibility_mode: standard
   base_url: http://127.0.0.1:8001/v1
   model_name: local-medical-model
   temperature: 0.0

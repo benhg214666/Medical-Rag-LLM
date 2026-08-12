@@ -10,6 +10,7 @@
 
 from functools import lru_cache
 from pathlib import Path
+from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -73,9 +74,20 @@ class Settings(BaseSettings):
     # 上限的用意是防止呼叫端要求極大的 top_k，
     # 造成不必要的記憶體與序列化負擔（等同一種 DoS 防護）。
     retrieval_max_top_k: int = 50
+    # Internally retrieve a wider pool, rerank deterministically, then return only
+    # the caller's requested top_k. These defaults require no extra model.
+    retrieval_candidate_multiplier: int = 2
+    retrieval_min_candidate_k: int = 10
+    retrieval_reranking_enabled: bool = True
+    retrieval_rerank_lexical_weight: float = 0.15
+    retrieval_rerank_exact_date_bonus: float = 0.35
+    retrieval_rerank_exact_term_weight: float = 0.10
 
     # --- Phase 5：本地 OpenAI-compatible LLM ---
     llm_provider: str = "openai_compatible"
+    # Keep the standards-oriented vLLM payload unchanged unless the deployment
+    # explicitly selects an OpenAI-compatibility dialect.
+    llm_compatibility_mode: Literal["standard", "ollama"] = "standard"
     llm_base_url: str = "http://127.0.0.1:8001/v1"
     llm_model_name: str = "local-medical-model"
     llm_temperature: float = 0.0

@@ -200,6 +200,14 @@ def load_docx(file_path: Path) -> list[LoadedDocument]:
         if not paragraph.text.strip():
             continue
 
+        metadata: dict[str, object] = {}
+        style_name = getattr(paragraph.style, "name", "") or ""
+        if style_name.casefold().startswith("heading"):
+            metadata["heading_title"] = paragraph.text.strip()
+            parts = style_name.rsplit(" ", 1)
+            if len(parts) == 2 and parts[1].isdigit():
+                metadata["heading_level"] = int(parts[1])
+
         documents.append(
             LoadedDocument(
                 text=paragraph.text,
@@ -208,7 +216,7 @@ def load_docx(file_path: Path) -> list[LoadedDocument]:
                 file_type="docx",
                 page_number=None,
                 paragraph_number=paragraph_number,
-                metadata={},
+                metadata=metadata,
             )
         )
 

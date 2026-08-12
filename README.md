@@ -206,7 +206,7 @@ Phase 3 預設 CPU 執行，embedding 模型固定為
 不下載模型，也不需要 GPU、ROCm、網路或 Hugging Face 連線。真模型 smoke test
 必須另外明確執行。
 
-目前 Phase 3 索引、Phase 4 Top-K 語意搜尋與 Phase 5 RAG 答案生成
+目前 Phase 3 索引、Phase 4 兩階段檢索與 Phase 5 RAG 答案生成
 已串接完成。
 
 主要執行與部署環境為 Linux（公司 Lab 遠端主機），未來可使用 AMD GPU 與 ROCm。但 Phase 3 預設 CPU，純 CPU 環境即可啟動 API 與執行全部測試。
@@ -221,9 +221,20 @@ Phase 1 的所有功能（FastAPI 應用、`GET /`、`GET /health`、三個模�
 
 ## 三、尚未完成內容
 
-以下功能目前尚未實作：Hybrid Search、Reranker、前端介面與
+以下功能目前尚未實作：Hybrid Search、cross-encoder Reranker、前端介面與
 Docker 實際部署。Embedding、ChromaDB indexing、Retriever、RAG 問答與
 輕量評估已分別在 Phase 3–6 完成。
+
+Phase 4.1 已加入不需額外模型的輕量 reranker。系統先用既有向量檢索取得較大的
+候選池，再綜合原始語意分數、正規化字詞重疊、查詢中的精確日期，以及查詢內
+有意義詞彙的精確匹配來重排。候選池大小由 `RETRIEVAL_CANDIDATE_MULTIPLIER`
+與 `RETRIEVAL_MIN_CANDIDATE_K` 控制；API 的 `top_k` 仍表示最終回傳及送入 LLM
+的片段數，因此 LLM context 不會因候選擴張而無界增加。
+
+Phase 4.2 會在切塊後保留可確定辨識的父層 section／encounter heading，並以
+`section_title`、`section_path` metadata 隨 chunk 寫入向量索引。RAG prompt 只顯示
+實際保存的結構資訊，不推測相鄰 chunk 的關係。既有索引不會自動補上新 metadata；
+要套用此能力，必須重新匯入並重新索引原始文件。沒有可辨識 heading 的文件維持原行為。
 
 另外**本階段不支援掃描式 PDF 的 OCR**。掃描式 PDF 的內容是影像而非文字圖層，系統無法抽取文字，會明確回報錯誤訊息告知這可能是掃描式 PDF 且本階段不支援 OCR，而不是靜默回傳空結果。
 
@@ -448,7 +459,7 @@ curl.exe -X POST "http://127.0.0.1:8000/api/documents/upload" -F "file=@data/raw
 | `POST /api/documents/upload` | **上傳並處理文件** |
 | `POST /api/documents/{document_id}/index` | **將 processed JSON 建立本地向量索引** |
 | `GET /api/retrieval/status` | retrieval 模組狀態（已實作） |
-| `POST /api/retrieval/search` | **Top-K 語意檢索** |
+| `POST /api/retrieval/search` | **候選擴張、輕量重排後的 Top-K 檢索** |
 | `GET /api/rag/status` | RAG 模組狀態與模型名 |
 | `POST /api/rag/ask` | **產生有來源引用的 RAG 回答** |
 | `GET /api/query/status` | query 模組狀態（尚未實作） |
@@ -587,16 +598,17 @@ Git 內統一使用 LF 換行（已由 `.gitattributes` 強制）。若 shell sc
 `data/raw/` 與 `data/processed/` 已列入 `.gitignore`，但仍請留意：一旦敏感檔案被 commit 並推送到遠端（尤其是公開 repo），**即使之後刪除檔案，commit 歷史中仍然找得到**。commit 前養成執行 `git status` 檢查的習慣。
 
 系統的 log 只記錄檔名、格式、單位數、chunk 數與耗時等統計資訊，**不會記錄文件正文、完整病歷或 chunk 全文**。
-Retriever 的 log 也只記錄查詢長度、`top_k` 與結果數，不記錄查詢全文或向量。
+Retriever 的 log 也只記錄查詢長度、候選／最終 `top_k`、結果數與 chunk ID，
+不記錄查詢全文、向量或醫療文件正文。
 
 **本系統不是醫療器材，不能取代醫師的專業判斷。** 系統的輸出僅供資訊參考，任何臨床決策都必須由具備資格的醫療專業人員依據完整的臨床脈絡做出。
 
 ## 十一、目前的能力界線
 
 Phase 2 完成文件匯入與前處理；Phase 3 完成 Embedding 與 ChromaDB
-索引；Phase 4 完成 Top-K 語意檢索；Phase 5 已可透過另行啟動的
+索引；Phase 4 完成候選擴張與確定性輕量重排；Phase 5 已可透過另行啟動的
 本地 LLM，依檢索內容產生自然語言回答，並保留編號來源與 metadata
 以供追溯；Phase 6 提供 retrieval-only 與 end-to-end RAG 的可重現品質評估。
 
-Hybrid retrieval、reranking、大型 benchmark / LLM judge、前端、對話記憶、
+Hybrid retrieval、模型式 reranking、大型 benchmark / LLM judge、前端、對話記憶、
 進階醫療 guardrails 與 production deployment 仍屬後續工作。

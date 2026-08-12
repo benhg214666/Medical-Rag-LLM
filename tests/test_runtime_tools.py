@@ -10,7 +10,7 @@ import pytest
 from app.core.config import Settings
 from app.llm.base import LLMError
 from app.llm.factory import create_llm_provider
-from app.llm.local_backend import OpenAICompatibleLLM
+from app.llm.local_backend import OllamaOpenAICompatibleLLM, OpenAICompatibleLLM
 from app.llm.network import validate_local_llm_base_url
 from app.rag.models import RAGAnswer, RAGSource
 from scripts.check_runtime import (
@@ -234,6 +234,20 @@ class TestLocalNetworkPolicy:
         )
         assert provider.generate(system_prompt="s", user_prompt="u") == "ok"
         client.close()
+
+    def test_factory_selects_ollama_dialect_only_when_explicit(self) -> None:
+        standard = create_llm_provider(
+            Settings(_env_file=None, llm_compatibility_mode="standard")
+        )
+        ollama = create_llm_provider(
+            Settings(_env_file=None, llm_compatibility_mode="ollama")
+        )
+        try:
+            assert type(standard) is OpenAICompatibleLLM
+            assert type(ollama) is OllamaOpenAICompatibleLLM
+        finally:
+            standard._client.close()  # type: ignore[attr-defined]
+            ollama._client.close()  # type: ignore[attr-defined]
 
 
 class TestLLMSmoke:

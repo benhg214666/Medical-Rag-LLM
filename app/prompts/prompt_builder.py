@@ -25,10 +25,18 @@ class RAGPrompt:
 
 
 def build_rag_prompt(question: str, sources: list[RetrievalResult]) -> RAGPrompt:
-    context = "\n\n".join(
-        f"[Source {number}]\n{source.text}"
-        for number, source in enumerate(sources, start=1)
-    )
+    blocks: list[str] = []
+    for number, source in enumerate(sources, start=1):
+        section = source.metadata.get("section_path") or source.metadata.get(
+            "section_title"
+        )
+        section_line = (
+            f"\n[Document section: {section.strip()}]"
+            if isinstance(section, str) and section.strip()
+            else ""
+        )
+        blocks.append(f"[Source {number}]{section_line}\n{source.text}")
+    context = "\n\n".join(blocks)
     return RAGPrompt(
         system=SYSTEM_INSTRUCTION,
         user=f"QUESTION:\n{question}\n\nCONTEXT:\n\n{context}",

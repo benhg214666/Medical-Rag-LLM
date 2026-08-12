@@ -41,6 +41,7 @@ class OpenAICompatibleLLM:
                 {"role": "user", "content": user_prompt},
             ],
         }
+        payload.update(self._provider_payload())
         try:
             response = self._client.post("/chat/completions", json=payload)
             response.raise_for_status()
@@ -61,3 +62,17 @@ class OpenAICompatibleLLM:
         if not isinstance(content, str) or not content.strip():
             raise LLMError("本地 LLM 未回傳有效答案")
         return content.strip()
+
+    def _provider_payload(self) -> dict[str, Any]:
+        """Return opt-in compatibility fields; standard vLLM sends none."""
+        return {}
+
+
+class OllamaOpenAICompatibleLLM(OpenAICompatibleLLM):
+    """Ollama dialect for concise RAG answers from thinking-capable models."""
+
+    def _provider_payload(self) -> dict[str, Any]:
+        # Ollama's OpenAI-compatible endpoint documents "none" as the way to
+        # disable reasoning. This keeps the completion budget for final content;
+        # it is deliberately isolated from standard/vLLM requests.
+        return {"reasoning_effort": "none"}

@@ -5,14 +5,14 @@ from app.prompts.prompt_builder import build_rag_prompt
 from app.rag.constants import INSUFFICIENT_CONTEXT_ANSWER
 from app.rag.models import RAGAnswer, RAGSource
 from app.retrieval.models import RetrievalResult
-from app.retrieval.vector_retriever import VectorRetriever
+from app.retrieval.pipeline import RetrievalPipeline
 
 # Backward-compatible name for callers that imported the Phase 5 constant.
 NO_CONTEXT_ANSWER = INSUFFICIENT_CONTEXT_ANSWER
 
 
 class RAGService:
-    def __init__(self, retriever: VectorRetriever, llm: LLMProvider) -> None:
+    def __init__(self, retriever: RetrievalPipeline, llm: LLMProvider) -> None:
         self.retriever = retriever
         self.llm = llm
 

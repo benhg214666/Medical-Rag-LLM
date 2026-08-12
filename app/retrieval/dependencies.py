@@ -17,6 +17,8 @@ from app.core.config import Settings, get_settings
 from app.embeddings.base import EmbeddingError
 from app.embeddings.dependencies import get_embedding_backend_for
 from app.retrieval.exceptions import RetrievalBackendError
+from app.retrieval.pipeline import RetrievalPipeline
+from app.retrieval.reranker import LightweightReranker, RerankingWeights
 from app.retrieval.vector_retriever import VectorRetriever
 from app.vector_store.base import VectorStoreError
 from app.vector_store.factory import create_vector_store
@@ -24,7 +26,7 @@ from app.vector_store.factory import create_vector_store
 
 def get_vector_retriever(
     settings: Settings = Depends(get_settings),
-) -> VectorRetriever:
+) -> RetrievalPipeline:
     """建立 request-scoped retriever，共用 application-scoped embedding backend。
 
     建立時即驗證 embedding 相容性（見 VectorRetriever.ensure_ready），
@@ -39,7 +41,19 @@ def get_vector_retriever(
             max_top_k=settings.retrieval_max_top_k,
         )
         retriever.ensure_ready()
-        return retriever
+        return RetrievalPipeline(
+            retriever,
+            LightweightReranker(
+                RerankingWeights(
+                    lexical=settings.retrieval_rerank_lexical_weight,
+                    exact_date=settings.retrieval_rerank_exact_date_bonus,
+                    exact_term=settings.retrieval_rerank_exact_term_weight,
+                )
+            ),
+            reranking_enabled=settings.retrieval_reranking_enabled,
+            candidate_multiplier=settings.retrieval_candidate_multiplier,
+            min_candidate_k=settings.retrieval_min_candidate_k,
+        )
     except (
         EmbeddingError,
         VectorStoreError,

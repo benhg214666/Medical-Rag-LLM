@@ -106,6 +106,24 @@ class TestLoadDocx:
         assert documents[0].text == "第一段：主訴。"
         assert documents[1].text == "第二段：檢查結果。"
 
+    def test_heading_style_is_preserved_as_structural_metadata(
+        self, tmp_path: Path
+    ) -> None:
+        import docx
+
+        file_path = tmp_path / "headed.docx"
+        source = docx.Document()
+        source.add_heading("Renal Follow-up Encounter", level=1)
+        source.add_paragraph("Creatinine: 1.0 mg/dL")
+        source.save(str(file_path))
+
+        documents = load_docx(file_path)
+        assert documents[0].metadata == {
+            "heading_title": "Renal Follow-up Encounter",
+            "heading_level": 1,
+        }
+        assert documents[1].metadata == {}
+
     def test_blank_paragraphs_are_skipped(self, tmp_path: Path) -> None:
         file_path = tmp_path / "gaps.docx"
         self._create_docx(file_path, ["有內容", "", "   ", "也有內容"])
