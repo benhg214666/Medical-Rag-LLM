@@ -15,6 +15,7 @@ import logging
 import re
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 from app.core.config import Settings
 from app.ingestion.chunker import chunk_documents
@@ -138,6 +139,8 @@ def ingest_document(
     file_path: Path,
     settings: Settings,
     write_output: bool = True,
+    metadata: dict[str, Any] | None = None,
+    source: str | None = None,
 ) -> IngestionResult:
     """執行完整的文件匯入流程。
 
@@ -171,6 +174,16 @@ def ingest_document(
     file_type = file_path.suffix.lower().lstrip(".")
 
     loaded_documents = load_document(file_path)
+    if metadata or source:
+        loaded_documents = [
+            document.model_copy(
+                update={
+                    "source": source or document.source,
+                    "metadata": {**document.metadata, **(metadata or {})},
+                }
+            )
+            for document in loaded_documents
+        ]
     cleaned_documents = _clean_documents(loaded_documents)
 
     if not cleaned_documents:

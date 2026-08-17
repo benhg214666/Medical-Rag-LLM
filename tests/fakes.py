@@ -5,7 +5,7 @@ import math
 
 from app.embeddings.base import EmbeddingBackend
 from app.ingestion.models import DocumentChunk
-from app.vector_store.base import VectorMatch
+from app.vector_store.base import VectorMatch, VectorStore
 
 
 class FakeEmbeddingBackend(EmbeddingBackend):
@@ -37,6 +37,84 @@ class FakeEmbeddingBackend(EmbeddingBackend):
 
     def embed_query(self, text: str) -> list[float]:
         return self._vector(text)
+
+
+class MemoryVectorStore(VectorStore):
+    """In-memory upsert store shared by indexing orchestration unit tests."""
+
+    def __init__(self, collection_name: str = "memory_test") -> None:
+        self._collection_name = collection_name
+        self.records: dict[
+            str,
+            tuple[DocumentChunk, list[float], str],
+        ] = {}
+
+    @property
+    def collection_name(self) -> str:
+        return self._collection_name
+
+    @property
+    def distance_metric(self) -> str:
+        return "cosine"
+
+    def ensure_embedding_compatibility(
+        self,
+        model_name: str,
+        model_revision: str,
+        dimension: int,
+        normalized: bool,
+    ) -> None:
+        return None
+
+    def add_chunks(
+        self,
+        chunks: list[DocumentChunk],
+        embeddings: list[list[float]],
+        document_id: str,
+    ) -> None:
+        for chunk, embedding in zip(chunks, embeddings, strict=True):
+            self.records[chunk.chunk_id] = (chunk, embedding, document_id)
+
+    def delete_stale_chunks(
+        self,
+        document_id: str,
+        keep_chunk_ids: set[str],
+    ) -> int:
+        stale_ids = {
+            chunk_id
+            for chunk_id, record in self.records.items()
+            if record[2] == document_id and chunk_id not in keep_chunk_ids
+        }
+        return self.delete_chunks_by_ids(stale_ids)
+
+    def get_document_chunk_ids(self, document_id: str) -> set[str]:
+        return {
+            chunk_id
+            for chunk_id, record in self.records.items()
+            if record[2] == document_id
+        }
+
+    def delete_chunks_by_ids(self, chunk_ids: set[str]) -> int:
+        existing_ids = set(self.records).intersection(chunk_ids)
+        for chunk_id in existing_ids:
+            del self.records[chunk_id]
+        return len(existing_ids)
+
+    def count(self) -> int:
+        return len(self.records)
+
+    def delete_collection(self) -> None:
+        self.records.clear()
+
+    def collection_exists(self) -> bool:
+        return True
+
+    def search_by_vector(
+        self,
+        embedding: list[float],
+        top_k: int,
+    ) -> list[VectorMatch]:
+        return search_records_by_vector(self.records, embedding, top_k)
 
 
 def cosine_distance(left: list[float], right: list[float]) -> float:

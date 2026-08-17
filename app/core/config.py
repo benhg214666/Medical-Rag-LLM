@@ -45,6 +45,7 @@ class Settings(BaseSettings):
     # 使用相對路徑，讓專案可以搬到任何機器（含 Linux Lab 主機）而不需修改設定。
     raw_data_dir: Path = Path("data/raw")
     processed_data_dir: Path = Path("data/processed")
+    corpus_data_dir: Path = Path("data/corpus")
 
     # --- Phase 2：上傳限制 ---
     max_upload_size_mb: int = 20
@@ -121,6 +122,11 @@ def ensure_data_directories(settings: Settings) -> None:
     """
     settings.raw_data_dir.mkdir(parents=True, exist_ok=True)
     settings.processed_data_dir.mkdir(parents=True, exist_ok=True)
+
+
+def ensure_corpus_directory(settings: Settings) -> None:
+    """Create the permanent, manually maintained corpus directory."""
+    settings.corpus_data_dir.mkdir(parents=True, exist_ok=True)
 
 
 settings: Settings = get_settings()

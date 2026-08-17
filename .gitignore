@@ -50,6 +50,7 @@ data/raw/*
 !data/raw/.gitkeep
 data/processed/*
 !data/processed/.gitkeep
+# data/corpus is intentionally NOT ignored: it is the manually maintained source.
 data/evaluation/*
 !data/evaluation/.gitkeep
 !data/evaluation/example_cases.jsonl

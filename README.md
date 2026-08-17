@@ -554,6 +554,37 @@ python -m pytest -m integration -v
 它會驗證固定 revision、384 維、所有值 finite、L2 normalized，以及 E5 的
 `passage:`／`query:` prefix。
 
+## 後端 Corpus 批次匯入
+
+`data/corpus/` 是永久、人工維護的資料來源；`data/raw/`、`data/processed/`
+與 `vector_db/` 則是可重建的執行期資料。建議結構：
+
+```text
+data/corpus/
+├── patient_records/
+│   └── P001/
+│       └── 2026-06-10_SOAP.txt
+└── medical_knowledge/
+    └── diabetes/
+        └── hba1c_targets.txt
+```
+
+從專案根目錄批次匯入所有 `.txt`、`.pdf` 與 `.docx`：
+
+```powershell
+python scripts/ingest_corpus.py
+```
+
+腳本會沿用上傳 API 的 loader、清理、切塊、section context、embedding 與
+vector-store upsert 流程。病歷路徑會自動加入 `patient_id`、`source_type`，符合
+日期與類型命名時也會加入 `encounter_date`、`document_type`。
+
+如需清除並重建執行期資料（不會刪除 `data/corpus/`）：
+
+```powershell
+python scripts/reset_rag_data.py
+```
+
 ## 九、常見錯誤排除
 
 **`ModuleNotFoundError: No module named 'app'`**
